@@ -1,0 +1,114 @@
+import type { ServiceConfig, SuiteConfig } from "./config.js";
+import type { ChecksState, HealthState, SubscribersState, ToolsState } from "./probes.js";
+import type { Store } from "./store.js";
+
+/**
+ * What needs someone's attention, from one poll. Each finding names who owns the fix. Severities are
+ * holdings-mcp's: `fail` is wrong now; `drift` should heal by itself or is waiting for a person.
+ */
+
+export interface ServiceState {
+  name: string;
+  repo?: string;
+  admin?: string;
+  third_party: boolean;
+  up: boolean;
+  since: string;
+  health?: HealthState;
+  tools?: ToolsState;
+}
+
+export interface Finding {
+  id: string;
+  severity: "fail" | "drift";
+  /** Who owns the fix: a repository, or what the source said. */
+  fix: string;
+  summary: string;
+  examples?: string[];
+  first_seen: string;
+}
+
+interface Candidate extends Omit<Finding, "first_seen"> {
+  first_seen?: string;
+  /** Reported only once it has lasted this long: a subscriber a few changes behind between its polls isn't news. */
+  after_minutes?: number;
+}
+
+export const OWN_TOOLS = 2;
+
+export function toolsTotal(services: ServiceState[]): number {
+  return services.reduce((n, s) => n + (s.tools?.names.length ?? 0), OWN_TOOLS);
+}
+
+export function findFindings(
+  config: SuiteConfig, services: ServiceState[], subscribers: SubscribersState | undefined, checks: ChecksState | undefined,
+  store: Store, at: string,
+): Finding[] {
+  const found: Candidate[] = [];
+  const owner = (name: string) => config.services.find((s: ServiceConfig) => s.name === name)?.repo ?? name;
+
+  for (const s of services) {
+    const fix = s.repo ?? s.name;
+    if (!s.up) {
+      const why = s.health ? `isn't answering /health (${s.health.error ?? "no answer"})` : `isn't listing its tools (${s.tools?.error ?? "no answer"})`;
+      found.push({ id: `down:${s.name}`, severity: "fail", fix, summary: `${s.name} ${why}.`, first_seen: s.since });
+      continue;
+    }
+    if (s.health && s.tools && !s.tools.ok) {
+      found.push({ id: `mcp:${s.name}`, severity: "fail", fix, summary: `${s.name} answers /health but not an MCP tool listing (${s.tools.error ?? "no answer"}).` });
+    }
+    const d = s.health?.deployed;
+    if (d?.branch && d.branch !== "main") found.push({ id: `branch:${s.name}`, severity: "drift", fix, summary: `${s.name} is deployed from ${d.branch}, not main.`, first_seen: d.at });
+    if (d?.dirty) found.push({ id: `dirty:${s.name}`, severity: "drift", fix, summary: `${s.name} was deployed from a checkout with uncommitted changes, so its commit doesn't say what it runs.`, first_seen: d.at });
+    for (const c of s.health?.dependencies ?? []) {
+      if (!c.ok) found.push({ id: `dependency:${s.name}:${c.name}`, severity: "fail", fix, summary: `${s.name} reports that it can't reach ${c.name}.` });
+    }
+  }
+
+  if (config.subscribers && subscribers) {
+    if (!subscribers.ok) {
+      found.push({ id: "source:subscribers", severity: "fail", fix: config.subscribers.owner, summary: `The subscriber registry can't be read (${subscribers.error}).`, after_minutes: 5 });
+    }
+    for (const sub of subscribers.items) {
+      if (sub.blocked) found.push({ id: `subscriber-blocked:${sub.id}`, severity: "fail", fix: owner(sub.id), summary: `${sub.label} is blocked on the terminology: ${sub.blocked}.` });
+      else if (sub.pending > 0) {
+        const breaking = sub.pending_breaking ? `, ${sub.pending_breaking} breaking` : "";
+        found.push({
+          id: `subscriber-pending:${sub.id}`, severity: "drift", fix: owner(sub.id), after_minutes: config.subscribers.lag_minutes,
+          summary: `${sub.label} is ${sub.pending} terminology change${sub.pending === 1 ? "" : "s"} behind${breaking}.`,
+        });
+      }
+      const seen = sub.last_seen ? Date.parse(sub.last_seen) : NaN;
+      if (!(Date.parse(at) - seen < config.subscribers.stale_minutes * 60_000)) {
+        found.push({ id: `subscriber-quiet:${sub.id}`, severity: "drift", fix: owner(sub.id), summary: `${sub.label} hasn't asked the terminology for changes since ${sub.last_seen ?? "it registered"}.`, first_seen: sub.last_seen ?? undefined });
+      }
+    }
+  }
+
+  if (config.checks && checks) {
+    if (!checks.ok) found.push({ id: "source:checks", severity: "fail", fix: config.checks.owner, summary: `The cross-service checks can't be read (${checks.error}).`, after_minutes: 5 });
+    for (const c of checks.items) {
+      if (c.result !== "fail" && c.result !== "drift") continue;
+      found.push({
+        id: `cross-service:${c.name}`, severity: c.result, fix: c.fix || config.checks.owner, first_seen: c.first_seen,
+        summary: `${c.name}: ${c.count} found.`, ...(c.examples.length ? { examples: c.examples } : {}),
+      });
+    }
+  }
+
+  const total = toolsTotal(services);
+  if (config.tool_budget !== undefined && total > config.tool_budget) {
+    found.push({ id: "tool-budget", severity: "drift", fix: "the portal's tool toggles", summary: `The suite lists ${total} tools, over the budget of ${config.tool_budget}.` });
+  }
+
+  const now = Date.parse(at);
+  const findings = found.map((c) => {
+    const { after_minutes, ...rest } = c;
+    const seen = store.firstSeen(c.id, at);
+    const first_seen = c.first_seen && Date.parse(c.first_seen) < Date.parse(seen) ? c.first_seen : seen;
+    return { finding: { ...rest, first_seen } as Finding, due: now - Date.parse(seen) >= (after_minutes ?? 0) * 60_000 };
+  });
+  store.keep(services.map((s) => s.name), found.map((c) => c.id));
+  return findings.filter((f) => f.due).map((f) => f.finding)
+    .sort((a, b) => (a.severity === b.severity ? a.first_seen.localeCompare(b.first_seen) : a.severity === "fail" ? -1 : 1));
+}

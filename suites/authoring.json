@@ -1,0 +1,14 @@
+{
+  "suite": "authoring",
+  "portal": "https://authoring.majerus.us/mcp",
+  "services": [
+    { "name": "corpus-mcp", "health": "http://corpus-mcp.localdomain:8000/health", "mcp": "http://corpus-mcp.localdomain:8000/mcp", "repo": "jmajerus/corpus-mcp", "admin": "http://corpus-mcp.localdomain:8000/admin" },
+    { "name": "quote-mcp", "health": "http://quote-mcp.localdomain:8000/health", "mcp": "http://quote-mcp.localdomain:8000/mcp", "repo": "jmajerus/quote-mcp" },
+    { "name": "terminology-mcp", "health": "http://terminology-mcp.localdomain:8000/health", "mcp": "http://terminology-mcp.localdomain:8000/mcp", "repo": "jmajerus/terminology-mcp" },
+    { "name": "holdings-mcp", "health": "http://holdings-mcp.localdomain:8000/health", "mcp": "http://holdings-mcp.localdomain:8000/mcp", "repo": "jmajerus/holdings-mcp", "admin": "http://holdings-mcp.localdomain:8000/admin" },
+    { "name": "iasp-mcp", "health": "http://iasp-mcp.localdomain:8000/health", "mcp": "http://iasp-mcp.localdomain:8000/mcp", "repo": "jmajerus/iasp-mcp" },
+    { "name": "zotero-mcp", "mcp": "http://zotero-mcp.localdomain:8000/mcp", "third_party": true }
+  ],
+  "subscribers": { "url": "http://terminology-mcp.localdomain:8000/api/subscribers", "owner": "jmajerus/terminology-mcp" },
+  "checks": { "url": "http://holdings-mcp.localdomain:8000/api/checks", "owner": "jmajerus/holdings-mcp" }
+}

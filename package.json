@@ -1,0 +1,30 @@
+{
+  "name": "authoring-ops-mcp",
+  "version": "0.1.0",
+  "description": "Is the suite healthy, and if not, where do I look? One dashboard and two read-only MCP tools over every server behind a portal",
+  "scripts": {
+    "ops": "tsx --env-file-if-exists=.env src/cli.ts",
+    "serve": "tsx --env-file-if-exists=.env src/cli.ts serve",
+    "status": "tsx --env-file-if-exists=.env src/cli.ts status",
+    "build": "tsc -p tsconfig.build.json",
+    "deploy": "node --env-file-if-exists=.env tools/deploy.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "jose": "^6.2.14",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

@@ -1,0 +1,20 @@
+[Unit]
+Description=authoring-ops-mcp: the suite's dashboard and MCP server (Streamable HTTP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ops
+Group=ops
+EnvironmentFile=/etc/authoring-ops-mcp/env
+WorkingDirectory=/opt/authoring-ops-mcp/current
+ExecStart=/usr/bin/node /opt/authoring-ops-mcp/current/dist/cli.js serve
+Restart=on-failure
+RestartSec=30
+NoNewPrivileges=yes
+ProtectSystem=strict
+PrivateTmp=yes
+ReadWritePaths=/var/lib/authoring-ops-mcp
+
+[Install]
+WantedBy=multi-user.target
