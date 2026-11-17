@@ -8,7 +8,8 @@ the authoring skills to sessions that have none installed. It reads and reports,
 finding names who owns the fix.
 
 See [PLAN.md](PLAN.md) for what is built and what isn't, and [docs/health-contract.md](docs/health-contract.md)
-for what it reads from each server.
+for what it reads from each server. [docs/interop/](docs/interop/) keeps the whole-suite test runs and their
+findings.
 
 ## Run it
 
