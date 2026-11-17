@@ -91,7 +91,7 @@ export class Poller {
     this.snapshot = {
       suite: config.suite, ...(config.portal ? { portal: config.portal } : {}), polled_at: at, services,
       ...(subscribers ? { subscribers } : {}), ...(checks ? { checks } : {}),
-      tools_total: toolsTotal(services), ...(config.tool_budget !== undefined ? { tool_budget: config.tool_budget } : {}),
+      tools_total: toolsTotal(services, this.skills), ...(config.tool_budget !== undefined ? { tool_budget: config.tool_budget } : {}),
       ...(this.skills ? { skills: {
         version: this.skills.version, names: this.skills.skills.map((s) => s.name),
         tools_checked: Object.values(this.skills.toolsUsed ?? {}).flat().length,

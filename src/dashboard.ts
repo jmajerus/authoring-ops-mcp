@@ -100,7 +100,7 @@ export function dashboardPage(s: Snapshot | undefined, suite: string, now = Date
 <p class="s">Polled ${time(s.polled_at, now)} ago. ${s.portal ? `Portal: ${link(s.portal, s.portal)}. ` : ""}Reloads every minute. This page reads and reports; it changes nothing.</p>
 <h2>Services</h2>
 ${servicesTable(s, now)}
-<p class="s">${s.tools_total} tools across the suite${budget}, counting this server's four. The portal's own toggles aren't visible from here.</p>
+<p class="s">${s.tools_total} tools across the suite${budget}, counting this server's ${s.skills ? "four" : "two"}. The portal's own toggles aren't visible from here.</p>
 ${findingsTable(s.findings, now)}
 ${subscribersTable(s, now)}
 ${skillsSection(s)}

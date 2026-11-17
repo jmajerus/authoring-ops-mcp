@@ -36,10 +36,11 @@ interface Candidate extends Omit<Finding, "first_seen"> {
   after_minutes?: number;
 }
 
-export const OWN_TOOLS = 4;
+/** This server's own tools: status and findings, and list_skills and get_skill when it carries skills. */
+export const ownTools = (skills?: SkillSet) => (skills ? 4 : 2);
 
-export function toolsTotal(services: ServiceState[]): number {
-  return services.reduce((n, s) => n + (s.tools?.names.length ?? 0), OWN_TOOLS);
+export function toolsTotal(services: ServiceState[], skills?: SkillSet): number {
+  return services.reduce((n, s) => n + (s.tools?.names.length ?? 0), ownTools(skills));
 }
 
 export function findFindings(
@@ -101,7 +102,7 @@ export function findFindings(
 
   if (skills) found.push(...skillFindings(config, services, skills));
 
-  const total = toolsTotal(services);
+  const total = toolsTotal(services, skills);
   if (config.tool_budget !== undefined && total > config.tool_budget) {
     found.push({ id: "tool-budget", severity: "drift", fix: "the portal's tool toggles", summary: `The suite lists ${total} tools, over the budget of ${config.tool_budget}.` });
   }
