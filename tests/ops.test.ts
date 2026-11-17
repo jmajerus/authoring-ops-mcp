@@ -67,6 +67,8 @@ function world(skills?: SkillSet) {
   return { w, poller };
 }
 const ids = (s: { findings: { id: string }[] }) => s.findings.map((f) => f.id);
+/** No Access team, whatever the shell's ACCESS_TEAM_DOMAIN says (the deploy runs the tests with .env loaded). */
+const NO_TEAM = { lanHosts: [] };
 
 describe("config", () => {
   it("rejects a service with nothing to probe, and a duplicate", () => {
@@ -283,7 +285,7 @@ describe("the server", () => {
   it("serves the dashboard, /health, and both tools", async () => {
     const { w, poller } = world(loadSkills(skillsDir()));
     w.health = { ok: true, version: "<b>1</b>", deployed: { branch: "main", commit: "abcdef0123", at: "2026-11-15T12:00:00Z", dirty: true } };
-    const server = await serveHttp(poller, { host: "127.0.0.1", port: 0, stateDir: "/nonexistent" });
+    const server = await serveHttp(poller, { host: "127.0.0.1", port: 0, stateDir: "/nonexistent", access: NO_TEAM });
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     try {
       expect(await (await fetch(`${base}/`)).text()).toContain("first poll");
@@ -328,7 +330,7 @@ describe("the server", () => {
     expect(findings.find((f) => f.id === "down:b-mcp")).toMatchObject({ summary: "b-mcp isn't listing its tools.", detail: expect.stringContaining("ECONNREFUSED") });
     expect(findings.find((f) => f.id === "subscriber-blocked:a-mcp")).toMatchObject({ summary: "A is blocked on the terminology.", detail: "scheme s gone at 10.0.0.9" });
 
-    const server = await serveHttp(poller, { host: "127.0.0.1", port: 0, stateDir: "/nonexistent" });
+    const server = await serveHttp(poller, { host: "127.0.0.1", port: 0, stateDir: "/nonexistent", access: NO_TEAM });
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     try {
       const tunnel = await fetch(`${base}/`, { headers: { "cf-ray": "x" } });
