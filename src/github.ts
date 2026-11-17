@@ -13,6 +13,9 @@ export interface ForkConfig {
 
 export interface Comparison { ahead: number; behind: number }
 
+/** What the fork deploy (tools/deploy-fork.mjs) last installed, from forks.json in the state directory. */
+export interface Installed { commit: string; branch?: string; at?: string }
+
 export interface ForkState {
   ok: boolean;
   error?: string;
@@ -21,6 +24,10 @@ export interface ForkState {
   upstream: string;
   repo: string;
   branch: string;
+  /** The commit the deploy installed. Without one, the comparisons are of the branch's tip. */
+  installed?: Installed;
+  /** Commits on the branch that aren't installed (ahead), and installed ones that aren't on it (behind). */
+  undeployed?: Comparison;
   release?: { tag: string; at?: string } & Comparison;
   head?: { branch: string } & Comparison;
 }
@@ -46,31 +53,55 @@ export function githubRepo(url: string | undefined): string | undefined {
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const ref = (s: string) => s.split("/").map(encodeURIComponent).join("/");
 
-/** Compares the fork's branch with upstream's latest release and default branch. On failure the last good numbers are kept, marked not ok. */
-export async function probeFork(upstream: string, fork: ForkConfig, get: GitHubGet, at: string, last?: ForkState): Promise<ForkState> {
-  const base = { checked_at: at, upstream, repo: fork.repo, branch: fork.branch };
+/**
+ * Compares what the service runs with upstream's latest release and default branch: the installed commit when the
+ * deploy recorded one, else the branch's tip. With an installed commit, also counts the branch's commits not yet
+ * deployed. On failure the last good numbers are kept, marked not ok.
+ */
+export async function probeFork(upstream: string, fork: ForkConfig, get: GitHubGet, at: string, last?: ForkState, installed?: Installed): Promise<ForkState> {
+  const base = { checked_at: at, upstream, repo: fork.repo, branch: fork.branch, ...(installed ? { installed } : {}) };
   const [owner, name] = fork.repo.split("/");
-  const compare = async (from: string): Promise<Comparison> => {
-    const c = await get(`/repos/${upstream}/compare/${ref(from)}...${owner}:${name}:${ref(fork.branch)}`);
-    if (!isObject(c) || typeof c.ahead_by !== "number" || typeof c.behind_by !== "number") throw new Error(`GitHub can't compare ${fork.repo}:${fork.branch} with ${upstream} ${from}`);
+  // A commit is found across the fork network by its sha alone; a branch needs the fork named.
+  const running = installed ? installed.commit : `${owner}:${name}:${ref(fork.branch)}`;
+  const comparison = async (p: string, what: string): Promise<Comparison> => {
+    const c = await get(p);
+    if (!isObject(c) || typeof c.ahead_by !== "number" || typeof c.behind_by !== "number") throw new Error(`GitHub can't compare ${what}`);
     return { ahead: c.ahead_by, behind: c.behind_by };
   };
+  const compare = (from: string) => comparison(`/repos/${upstream}/compare/${ref(from)}...${running}`, `${fork.repo} with ${upstream} ${from}`);
   try {
     const [repo, release] = await Promise.all([get(`/repos/${upstream}`), get(`/repos/${upstream}/releases/latest`)]);
     if (!isObject(repo) || typeof repo.default_branch !== "string") throw new Error(`GitHub has no project ${upstream}`);
     const tag = isObject(release) && typeof release.tag_name === "string" ? release.tag_name : undefined;
     const published = isObject(release) && typeof release.published_at === "string" ? release.published_at : undefined;
-    const [head, sinceRelease] = await Promise.all([compare(repo.default_branch), tag ? compare(tag) : undefined]);
+    const [head, sinceRelease, undeployed] = await Promise.all([
+      compare(repo.default_branch), tag ? compare(tag) : undefined,
+      installed ? comparison(`/repos/${fork.repo}/compare/${installed.commit}...${ref(fork.branch)}`, `${fork.branch} with the installed commit`) : undefined,
+    ]);
     return {
       ok: true, ...base, head: { branch: repo.default_branch, ...head },
       ...(tag && sinceRelease ? { release: { tag, ...(published ? { at: published } : {}), ...sinceRelease } } : {}),
+      ...(undeployed ? { undeployed } : {}),
     };
   } catch (error) {
+    // The last numbers stand only if they were of the same commit.
+    const same = last && last.installed?.commit === installed?.commit;
     return {
       ok: false, error: (error as Error).message ?? String(error), ...base,
-      ...(last?.release ? { release: last.release } : {}), ...(last?.head ? { head: last.head } : {}),
+      ...(same && last.release ? { release: last.release } : {}), ...(same && last.head ? { head: last.head } : {}),
+      ...(same && last.undeployed ? { undeployed: last.undeployed } : {}),
     };
   }
+}
+
+/** forks.json's records, by service; anything unreadable is left out. */
+export function readInstalled(raw: unknown): Record<string, Installed> {
+  if (!isObject(raw)) return {};
+  return Object.fromEntries(Object.entries(raw).filter(([, v]) => isObject(v) && typeof v.commit === "string" && /^[0-9a-f]{7,40}$/.test(v.commit))
+    .map(([k, v]) => {
+      const r = v as Record<string, unknown>;
+      return [k, { commit: r.commit as string, ...(typeof r.branch === "string" ? { branch: r.branch } : {}), ...(typeof r.at === "string" ? { at: r.at } : {}) }];
+    }));
 }
 
 /** "3 ahead, 12 behind v0.17.2", for a line on a page. */

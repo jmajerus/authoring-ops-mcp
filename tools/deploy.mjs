@@ -3,17 +3,17 @@
 // shared `authoring` login, one `sudo -S` call per step with the password piped on stdin, a release directory
 // per deploy, a health check, and rollback to the previous release on failure. There is no store to migrate:
 // the state file is a few "since" times, and any release reads it.
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { runAsRoot as runAs, shellQuote, sshEnv, sshOptions } from "./remote.mjs";
 import { vendorSkills } from "./vendor-skills.mjs";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const NAME = "authoring-ops-mcp";
 const HOST = process.env.OPS_DEPLOY_HOST ?? `authoring@${NAME}.localdomain`;
-const ASKPASS = path.join(root, "tools", "askpass.mjs");
 const ENV_NAMES = ["ACCESS_TEAM_DOMAIN", "OPS_POLL_SECONDS"];
 
 const USAGE = `Usage: npm run deploy -- [--provision | --env] [--skip-tests]
@@ -31,32 +31,9 @@ const USAGE = `Usage: npm run deploy -- [--provision | --env] [--skip-tests]
 Needs AUTHORING_DEPLOY_PASSWORD in .env.`;
 
 const password = process.env.AUTHORING_DEPLOY_PASSWORD;
-const sshOptions = ["-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=10"];
 
-function sshEnv() {
-  return { ...process.env, SSH_ASKPASS: ASKPASS, SSH_ASKPASS_REQUIRE: "force", DISPLAY: process.env.DISPLAY || "ops-deploy" };
-}
-
-function shellQuote(value) {
-  return `'${String(value).replace(/'/g, `'\\''`)}'`;
-}
-
-/** Runs a bash script as root on the host; resolves with its stdout (also echoed). */
-function runAsRoot(script) {
-  const encoded = Buffer.from(script).toString("base64");
-  const command = `sudo -S -p '' bash -c "$(printf %s '${encoded}' | base64 -d)"`;
-  return new Promise((resolve, reject) => {
-    const ssh = spawn("ssh", [...sshOptions, HOST, command], { env: sshEnv(), stdio: ["pipe", "pipe", "inherit"] });
-    let out = "";
-    ssh.stdout.on("data", (chunk) => {
-      out += chunk;
-      process.stdout.write(chunk);
-    });
-    ssh.stdin.end(`${password}\n`);
-    ssh.on("error", reject);
-    ssh.on("exit", (code) => (code === 0 ? resolve(out) : reject(new Error(`${HOST}: remote script exited with ${code}`))));
-  });
-}
+/** Runs a bash script as root on this server's LXC; resolves with its stdout (also echoed). */
+const runAsRoot = (script) => runAs(HOST, password, script);
 
 const WAIT_FOR_HEALTH = `
 set -a; . /etc/${NAME}/env; set +a

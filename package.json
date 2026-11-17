@@ -9,6 +9,7 @@
     "skills": "node tools/vendor-skills.mjs",
     "build": "tsc -p tsconfig.build.json",
     "deploy": "node --env-file-if-exists=.env tools/deploy.mjs",
+    "deploy:fork": "node --env-file-if-exists=.env tools/deploy-fork.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

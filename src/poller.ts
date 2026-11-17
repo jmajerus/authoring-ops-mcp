@@ -4,7 +4,7 @@ import {
   type ChecksState, type FetchJson, type ListTools, type SubscribersState, type ToolsState,
   fetchJson, listTools, probeChecks, probeHealth, probeSubscribers, probeTools,
 } from "./probes.js";
-import { type ForkState, type GitHubGet, githubGet, githubRepo, probeFork } from "./github.js";
+import { type ForkState, type GitHubGet, type Installed, githubGet, githubRepo, probeFork } from "./github.js";
 import type { SkillSet, SkillsVersion } from "./skills.js";
 import type { Store } from "./store.js";
 
@@ -28,7 +28,11 @@ const LISTING_SECONDS = 600;
 /** A fork moves when someone pushes to it or upstream releases: once an hour is plenty, and well inside GitHub's anonymous limit. */
 const FORK_SECONDS = 3600;
 
-export interface PollerDeps { fetchJson?: FetchJson; listTools?: ListTools; github?: GitHubGet; clock?: () => Date; skills?: SkillSet }
+export interface PollerDeps {
+  fetchJson?: FetchJson; listTools?: ListTools; github?: GitHubGet; clock?: () => Date; skills?: SkillSet;
+  /** What the fork deploy last installed, by service (forks.json). Read every poll: a deploy changes it. */
+  installed?: () => Record<string, Installed>;
+}
 
 export class Poller {
   snapshot: Snapshot | undefined;
@@ -38,6 +42,7 @@ export class Poller {
   private readonly get: FetchJson;
   private readonly list: ListTools;
   private readonly github: GitHubGet;
+  private readonly installed: () => Record<string, Installed>;
   private readonly clock: () => Date;
   /** The skills this release carries, if any. They don't change while it runs. */
   readonly skills: SkillSet | undefined;
@@ -46,6 +51,7 @@ export class Poller {
     this.get = deps.fetchJson ?? fetchJson;
     this.list = deps.listTools ?? listTools;
     this.github = deps.github ?? githubGet;
+    this.installed = deps.installed ?? (() => ({}));
     this.clock = deps.clock ?? (() => new Date());
     this.skills = deps.skills;
   }
@@ -70,16 +76,19 @@ export class Poller {
   private async pollOnce(): Promise<Snapshot> {
     const { config } = this;
     const at = this.clock().toISOString();
+    const installed = this.installed();
     const [probed, subscribers, checks] = await Promise.all([
       Promise.all(config.services.map(async (service) => {
         const last = this.tools.get(service.name);
         const fresh = last?.ok && last.ok_at && Date.parse(at) - Date.parse(last.ok_at) < LISTING_SECONDS * 1000;
         const lastFork = this.forks.get(service.name);
-        const forkFresh = lastFork && Date.parse(at) - Date.parse(lastFork.checked_at) < FORK_SECONDS * 1000;
+        const now = installed[service.name];
+        // A deploy since the last check is news now, not in up to an hour.
+        const forkFresh = lastFork && lastFork.installed?.commit === now?.commit && Date.parse(at) - Date.parse(lastFork.checked_at) < FORK_SECONDS * 1000;
         const [health, tools, fork] = await Promise.all([
           service.health ? probeHealth(service.health, this.get, at) : undefined,
           !service.mcp ? undefined : service.health && fresh ? last : probeTools(service.mcp, this.list, at, last),
-          !service.fork ? undefined : forkFresh ? lastFork : probeFork(githubRepo(service.upstream)!, service.fork, this.github, at, lastFork),
+          !service.fork ? undefined : forkFresh ? lastFork : probeFork(githubRepo(service.upstream)!, service.fork, this.github, at, lastFork, now),
         ]);
         if (tools) this.tools.set(service.name, tools);
         if (fork) this.forks.set(service.name, fork);

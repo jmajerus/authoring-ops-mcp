@@ -41,6 +41,7 @@ uses that copy instead.
 | A cross-service check that isn't passing, one line each, linked to the worklist | as the check says | holdings-mcp's `/api/checks` |
 | A tool the skills call that its service no longer lists, or one they call that `tools-used.json` misses | fail / drift | the skills' `tools-used.json`, against each listing |
 | More tools across the suite than `tool_budget`, when the suite config sets one | drift | the listings |
+| Commits on a fork's branch that the service doesn't run yet (after an hour), or a service running a commit that isn't on its branch | drift | GitHub, against what `deploy:fork` recorded |
 
 The rest of the suite owns the facts. holdings-mcp runs the cross-service checks, because it holds the joins
 between works; terminology-mcp keeps its subscribers. This server reads both and puts them beside the health of
@@ -50,8 +51,8 @@ every service, so one answer covers the suite. A source it can't read is a findi
 
 [suites/authoring.json](suites/authoring.json) names every service, its `/health` and MCP URLs, its
 repository, its admin and public pages, a third party's project (`upstream`), and the fork it runs, if any
-(`fork`: `{ repo, branch }`); where the subscribers and checks are read; the routing lines in the instructions (`guidance`); the
-tool budget; and the skills ref a release carries. The code names none of them. `OPS_SUITE` chooses the file.
+(`fork`: `{ repo, branch, deploy }`, where `deploy` says how `npm run deploy:fork` reaches it); where the
+subscribers and checks are read; the routing lines in the instructions (`guidance`); the tool budget; and the skills ref a release carries. The code names none of them. `OPS_SUITE` chooses the file.
 
 Keep the guidance short: the portal joins every server's instructions and cuts the whole off at a length.
 
@@ -91,10 +92,12 @@ with none, to its page here under `/services/`; `/admin` links it to the reposit
 that commit. A service without `/health` (a third party) gets its version from what it reports when a client
 connects for the tool listing.
 
-For a service run from a fork, the server checks GitHub hourly: how many commits the fork's branch is ahead of
-and behind upstream's latest release, and upstream's default branch. The public page, the service's page, and
-`status` show it. It isn't a finding, since a fork behind upstream isn't wrong; it's there for deciding when to
-rebase before the next change. It needs no token (four requests an hour); `GITHUB_TOKEN`, if set, is sent.
+For a service run from a fork, the server checks GitHub hourly: how many commits the running commit (the one
+`deploy:fork` recorded; the branch's tip until there is one) is ahead of and behind upstream's latest release and
+upstream's default branch, and how many commits on the branch aren't deployed yet. The public page, the service's
+page, and `status` show it. Being behind upstream isn't a finding, since it isn't wrong; it's there for deciding
+when to rebase before the next change. A deploy is noticed at the next poll. It needs no token (a handful of
+requests an hour); `GITHUB_TOKEN`, if set, is sent.
 
 A finding keeps its `summary` safe for the public page and puts what the failing source said (an error, a
 reason) in `detail`, which `/admin` and the `findings` tool show.
@@ -122,6 +125,21 @@ npm run deploy                  # build, test, carry the skills, install, restar
 On holdings-mcp's pattern, to `authoring-ops-mcp.localdomain`: a release directory per deploy, rollback on a
 failed health check, and the branch and commit recorded for `/health`. The deploy installs and enables the
 systemd unit itself. `AUTHORING_DEPLOY_PASSWORD` in `.env` is the `authoring` login's.
+
+### A service run from a fork
+
+```
+npm run deploy:fork -- zotero-mcp            # install the tip of the fork's branch, check it, record it
+npm run deploy:fork -- zotero-mcp --commit <sha>
+npm run deploy:fork -- zotero-mcp --adopt    # install nothing; record the commit it already runs
+```
+
+zotero-mcp is someone else's project, run from a fork (`jmajerus/zotero-mcp`, branch `lan`). The deploy lives
+here, not in the fork, so the fork stays easy to rebase on upstream. It pip-installs the branch's tip, pinned to
+its commit, into the service's virtualenv over SSH as root (the LXC must take this machine's key), restarts the
+unit, and lists the tools: if the listing doesn't answer or drops a tool the skills call, the previous commit goes
+back. The commit is recorded in `forks.json` beside `deployed.json` on this server's LXC, which the fork check
+reads each poll. The service's `fork.deploy` in the suite config says where: `ssh`, `venv`, `package`, `unit`.
 
 For the portal, the host needs its own Cloudflare Access application (self-hosted, with the same policy and
 OAuth setting as the other servers). Without one, the tunnel passes requests through with no token, the server

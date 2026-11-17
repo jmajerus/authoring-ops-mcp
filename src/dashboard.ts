@@ -122,13 +122,20 @@ ${links ? `<ul>${links}</ul>` : ""}`;
 function forkSection(f: ForkState, running: string | undefined, now: number): string {
   const gh = (repo: string, path = "") => `https://github.com/${repo}${path}`;
   const count = (c: { ahead: number; behind: number }) => `${c.ahead} commit${c.ahead === 1 ? "" : "s"} ahead, ${c.behind} behind`;
+  const [owner, name] = f.repo.split("/");
+  const commit = f.installed?.commit;
+  const runningRef = commit ?? `${owner}:${name}:${encodeURIComponent(f.branch)}`;
   const lines = [
     f.release ? `<li>Against upstream's latest release, ${link(gh(f.upstream, `/releases/tag/${encodeURIComponent(f.release.tag)}`), f.release.tag)}${f.release.at ? ` <span class="s">(${time(f.release.at, now)} ago)</span>` : ""}: ${count(f.release)}.</li>` : "",
-    f.head ? `<li>Against upstream's ${esc(f.head.branch)}: ${link(gh(f.upstream, `/compare/${encodeURIComponent(f.head.branch)}...${f.repo.split("/")[0]}:${f.repo.split("/")[1]}:${encodeURIComponent(f.branch)}`), count(f.head))}.</li>` : "",
+    f.head ? `<li>Against upstream's ${esc(f.head.branch)}: ${link(gh(f.upstream, `/compare/${encodeURIComponent(f.head.branch)}...${runningRef}`), count(f.head))}.</li>` : "",
+    commit && f.undeployed ? `<li>${f.undeployed.ahead ? link(gh(f.repo, `/compare/${commit}...${encodeURIComponent(f.branch)}`), `${f.undeployed.ahead} commit${f.undeployed.ahead === 1 ? "" : "s"} on ${f.branch} not deployed yet`) : `Nothing on ${esc(f.branch)} waiting to be deployed`}${f.undeployed.behind ? `; the installed commit isn't on ${esc(f.branch)}` : ""}.</li>` : "",
     running ? `<li>The server reports version ${esc(running)}.</li>` : "",
   ].filter(Boolean).join("\n");
+  const runs = commit
+    ? `Runs ${link(gh(f.repo, `/commit/${commit}`), commit.slice(0, 7))}${f.installed?.at ? `, deployed ${time(f.installed.at, now)} ago,` : ""} from ${link(gh(f.repo, `/tree/${encodeURIComponent(f.branch)}`), `${f.repo} ${f.branch}`)}`
+    : `Runs ${link(gh(f.repo, `/tree/${encodeURIComponent(f.branch)}`), `${f.repo} ${f.branch}`)} <span class="s">(no deploy recorded: the comparisons are of the branch's tip)</span>`;
   return `<h2>Source</h2>
-<p>Runs ${link(gh(f.repo, `/tree/${encodeURIComponent(f.branch)}`), `${f.repo} ${f.branch}`)}, a fork of ${link(gh(f.upstream), f.upstream)}.</p>
+<p>${runs}, a fork of ${link(gh(f.upstream), f.upstream)}.</p>
 ${lines ? `<ul>${lines}</ul>` : ""}
 <p class="s">Checked against GitHub ${time(f.checked_at, now)} ago, hourly.${f.ok ? "" : ` That check didn't answer${lines ? "; these are from the last one that did" : ""}.`}</p>`;
 }

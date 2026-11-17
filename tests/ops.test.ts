@@ -10,6 +10,7 @@ import { parseConfig } from "../src/config.js";
 import { ago, dashboardPage, servicePage } from "../src/dashboard.js";
 import { instructions } from "../src/mcp.js";
 import { Poller } from "../src/poller.js";
+import { type Installed, readInstalled } from "../src/github.js";
 import { readHealth } from "../src/probes.js";
 import { serveHttp } from "../src/server.js";
 import { type SkillSet, loadSkills, readSkillFile } from "../src/skills.js";
@@ -41,7 +42,7 @@ function skillsDir(toolsUsed: unknown = { "a-mcp": ["one"] }): string {
 
 
 /** A suite in which everything is as it should be; each test breaks one thing. */
-function world(skills?: SkillSet) {
+function world(skills?: SkillSet, installed?: () => Record<string, Installed>) {
   const w = {
     now: new Date("2026-11-16T12:00:00Z"),
     listed: 0,
@@ -60,7 +61,7 @@ function world(skills?: SkillSet) {
     tick(minutes: number) { w.now = new Date(w.now.getTime() + minutes * 60_000); },
   };
   const poller = new Poller(config, new Store(), {
-    clock: () => w.now, skills,
+    clock: () => w.now, skills, installed,
     github: async (p) => {
       w.githubCalls++;
       const body = w.github[p];
@@ -409,7 +410,7 @@ describe("the server", () => {
       expect(res.status).toBe(200);
       const page = await res.text();
       for (const shown of ["A third-party server", "version 0.15.1", `<a href="https://github.com/up/b">its project</a>`,
-        `Runs <a href="https://github.com/me/b/tree/lan">me/b lan</a>, a fork of <a href="https://github.com/up/b">up/b</a>.`,
+        `Runs <a href="https://github.com/me/b/tree/lan">me/b lan</a> <span class="s">(no deploy recorded: the comparisons are of the branch's tip)</span>, a fork of <a href="https://github.com/up/b">up/b</a>.`,
         "v2.0.0</a> <span class=\"s\">(", ": 3 commits ahead, 40 behind.", `<a href="https://github.com/up/b/compare/main...me:b:lan">3 commits ahead, 300 behind</a>`,
         "<code>three</code></td><td>called by the skills", "<code>four</code></td><td></td>", "called by the skills, not listed",
         "b-mcp no longer lists gone, which the skills call."]) expect(page).toContain(shown);
@@ -441,6 +442,34 @@ describe("the server", () => {
     const page = servicePage(poller.snapshot!, "b-mcp")!;
     expect(page).toContain("That check didn't answer; these are from the last one that did.");
     expect(page).not.toContain("403");
+  });
+
+  it("compares the deployed commit when a deploy recorded one, and reports commits waiting to be deployed", async () => {
+    const sha = "cb7d56d6eb31a5c3ddc73b6ca8068774d7cd1a1c";
+    let installed: Record<string, unknown> = {};
+    const { w, poller } = world(undefined, () => readInstalled(installed));
+    Object.assign(w.github, {
+      [`/repos/up/b/compare/main...${sha}`]: { ahead_by: 3, behind_by: 303 },
+      [`/repos/up/b/compare/v2.0.0...${sha}`]: { ahead_by: 3, behind_by: 41 },
+      [`/repos/me/b/compare/${sha}...lan`]: { ahead_by: 2, behind_by: 0 },
+    });
+    const fork = () => poller.snapshot!.services.find((s) => s.name === "b-mcp")!.fork!;
+    await poller.poll();
+    expect(fork().release).toMatchObject({ behind: 40 });
+
+    // A deploy is noticed at the next poll, not after the hour.
+    installed = { "b-mcp": { commit: sha, branch: "lan", at: "2026-11-16T11:00:00Z" }, junk: { commit: "not a sha" } };
+    w.tick(1);
+    await poller.poll();
+    expect(fork()).toMatchObject({ ok: true, installed: { commit: sha }, release: { behind: 41 }, undeployed: { ahead: 2, behind: 0 } });
+    expect(ids(poller.snapshot!)).not.toContain("fork-undeployed:b-mcp");
+    w.tick(61);
+    await poller.poll();
+    expect(poller.snapshot!.findings.find((f) => f.id === "fork-undeployed:b-mcp")).toMatchObject({ severity: "drift", summary: "me/b's lan has 2 commits that b-mcp doesn't run yet." });
+
+    const page = servicePage(poller.snapshot!, "b-mcp", [], w.now.getTime())!;
+    for (const shown of [`Runs <a href="https://github.com/me/b/commit/${sha}">cb7d56d</a>, deployed`, `<a href="https://github.com/me/b/compare/${sha}...lan">2 commits on lan not deployed yet</a>`,
+      `<a href="https://github.com/up/b/compare/main...${sha}">`]) expect(page).toContain(shown);
   });
 
   it("says how long ago in the nearest unit worth reading", () => {

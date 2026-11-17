@@ -35,6 +35,7 @@ export function statusOf(s: Snapshot) {
       ...(v.health?.version ?? v.tools?.version ? { version: v.health?.version ?? v.tools?.version } : {}),
       ...(v.fork ? { fork: {
         repo: v.fork.repo, branch: v.fork.branch, upstream: v.fork.upstream, checked_at: v.fork.checked_at,
+        ...(v.fork.installed ? { installed: v.fork.installed } : {}), ...(v.fork.undeployed ? { undeployed: v.fork.undeployed } : {}),
         ...(v.fork.release ? { release: v.fork.release } : {}), ...(v.fork.head ? { head: v.fork.head } : {}),
         ...(!v.fork.ok ? { error: v.fork.error } : {}),
       } } : {}),

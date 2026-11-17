@@ -70,6 +70,16 @@ export function findFindings(
     const d = s.health?.deployed;
     if (d?.branch && d.branch !== "main") found.push({ id: `branch:${s.name}`, severity: "drift", fix, summary: `${s.name} is deployed from ${d.branch}, not main.`, first_seen: d.at });
     if (d?.dirty) found.push({ id: `dirty:${s.name}`, severity: "drift", fix, summary: `${s.name} was deployed from a checkout with uncommitted changes, so its commit doesn't say what it runs.`, first_seen: d.at });
+    const f = s.fork;
+    if (f?.undeployed?.ahead) {
+      found.push({
+        id: `fork-undeployed:${s.name}`, severity: "drift", fix: `${f.repo}: npm run deploy:fork -- ${s.name}`, after_minutes: 60,
+        summary: `${f.repo}'s ${f.branch} has ${f.undeployed.ahead} commit${f.undeployed.ahead === 1 ? "" : "s"} that ${s.name} doesn't run yet.`,
+      });
+    }
+    if (f?.undeployed?.behind) {
+      found.push({ id: `fork-off-branch:${s.name}`, severity: "drift", fix: `${f.repo}: npm run deploy:fork -- ${s.name}`, summary: `${s.name} runs a commit that isn't on ${f.repo}'s ${f.branch}.` });
+    }
     for (const c of s.health?.dependencies ?? []) {
       if (!c.ok) found.push({ id: `dependency:${s.name}:${c.name}`, severity: "fail", fix, summary: `${s.name} reports that it can't reach ${c.name}.` });
     }
