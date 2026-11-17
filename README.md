@@ -70,10 +70,10 @@ every service lists, so a renamed or retired tool shows up as a finding before a
 |---|---|---|
 | `/` | anyone | the public page: services, findings by owner, terminology subscribers, skills. No addresses, no error text, no links to anything writable |
 | `/admin` | LAN | the same, with what each failing source said, the services' admin pages, the holdings worklist, and **Poll now** |
-| `POST /admin/poll` | LAN | the admin page's button: poll now, then back to `/admin`. Refused from another site's page |
+| `POST /admin/poll` | LAN | the admin page's button: poll now, then back to `/admin`. Only with a browser's word that it came from this server's page (`Origin` or `Sec-Fetch-Site`) |
 | `/health` | LAN | this server's own health, under the contract, with the skills ref it carries |
 | `/api/status` | LAN | the last poll in full, as JSON |
-| `POST /api/poll` | LAN | poll now (after a deploy, say), answering with the poll |
+| `POST /api/poll` | LAN | poll now (after a deploy, say), answering with the poll. For curl and scripts; refused when a browser says another site sent it |
 | `/mcp` | LAN, or Cloudflare Access | the four tools |
 
 Neither page changes anything; the admin page links to pages that do. Through the tunnel, `/` answers without a

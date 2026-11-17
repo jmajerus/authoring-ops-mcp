@@ -40,11 +40,20 @@ export function healthStatus(poller: Poller, stateDir = "data") {
   };
 }
 
-/** A form post from this server's own page: no Origin (an older browser, curl) or one naming this host. */
-function sameOrigin(req: http.IncomingMessage): boolean {
+/**
+ * Did this POST come from a page on this server? A browser says so with Origin, or with Sec-Fetch-Site; one
+ * that names another site is refused. With neither header, the request is from curl or a script, not a page:
+ * `required` says whether that is enough (POST /api/poll) or not (the admin page's form, which a browser
+ * always sends with one of them).
+ */
+export function fromThisSite(req: http.IncomingMessage, required: boolean): boolean {
   const origin = req.headers.origin;
-  if (!origin) return true;
-  try { return new URL(origin).host === req.headers.host; } catch { return false; }
+  if (origin !== undefined) {
+    try { return new URL(origin).host === req.headers.host; } catch { return false; }
+  }
+  const site = req.headers["sec-fetch-site"];
+  if (site !== undefined) return site === "same-origin";
+  return !required;
 }
 
 export function serveHttp(poller: Poller, options: ServeOptions): Promise<http.Server> {
@@ -65,12 +74,14 @@ export function serveHttp(poller: Poller, options: ServeOptions): Promise<http.S
         if (url.pathname === "/admin/poll") {
           if (req.method !== "POST") return void res.writeHead(405, { allow: "POST" }).end();
           // Only from the admin page itself, not a form on some other site the browser has open.
-          if (!sameOrigin(req)) return void res.writeHead(403).end();
+          if (!fromThisSite(req, true)) return void res.writeHead(403).end();
           await poller.poll();
           return void res.writeHead(303, { location: "/admin" }).end();
         }
         if (url.pathname === "/api/poll") {
           if (req.method !== "POST") return void res.writeHead(405, { ...json, allow: "POST" }).end(JSON.stringify({ error: "POST to poll." }));
+          // For curl and scripts; a page on another site can't use it in place of /admin/poll.
+          if (!fromThisSite(req, false)) return void res.writeHead(403, json).end(JSON.stringify({ error: "Not from this site." }));
           return void res.writeHead(200, json).end(JSON.stringify(await poller.poll()));
         }
         if (req.method !== "GET" && req.method !== "HEAD") return void res.writeHead(405, { allow: "GET, HEAD" }).end();

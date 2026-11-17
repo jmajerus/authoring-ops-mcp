@@ -346,8 +346,18 @@ describe("the server", () => {
 
       const polled = poller.snapshot!.polled_at;
       w.tick(1);
-      expect((await fetch(`${base}/admin/poll`, { method: "POST", headers: { origin: "http://evil.example" }, redirect: "manual" })).status).toBe(403);
+      const post = (path: string, headers: Record<string, string>) => fetch(`${base}${path}`, { method: "POST", headers, redirect: "manual" });
+      // The form needs a browser's word that it came from this page; another site's, or none at all, is refused.
+      expect((await post("/admin/poll", { origin: "http://evil.example" })).status).toBe(403);
+      expect((await post("/admin/poll", { origin: "null" })).status).toBe(403);
+      expect((await post("/admin/poll", { "sec-fetch-site": "cross-site" })).status).toBe(403);
+      expect((await post("/admin/poll", {})).status).toBe(403);
+      // /api/poll is for curl, but not a way round that.
+      expect((await post("/api/poll", { origin: "http://evil.example" })).status).toBe(403);
+      expect((await post("/api/poll", { "sec-fetch-site": "same-site" })).status).toBe(403);
       expect(poller.snapshot!.polled_at).toBe(polled);
+      expect((await post("/admin/poll", { "sec-fetch-site": "same-origin" })).status).toBe(303);
+      expect((await post("/api/poll", {})).status).toBe(200);
       const posted = await fetch(`${base}/admin/poll`, { method: "POST", headers: { origin: base }, redirect: "manual" });
       expect([posted.status, posted.headers.get("location")]).toEqual([303, "/admin"]);
       expect(poller.snapshot!.polled_at).not.toBe(polled);
