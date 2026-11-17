@@ -5,6 +5,7 @@ import type { JWTVerifyGetKey } from "jose";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { dashboardPage, servicePage } from "./dashboard.js";
+import { FAVICON } from "./favicon.js";
 import { AccessError, authorizeRequest, isPublicPath, requestAccessConfig, type RequestAccessConfig } from "./http-access.js";
 import { VERSION, createServer } from "./mcp.js";
 import type { Poller } from "./poller.js";
@@ -69,6 +70,11 @@ export function serveHttp(poller: Poller, options: ServeOptions): Promise<http.S
         if (req.method !== "GET" && req.method !== "HEAD") return void res.writeHead(405, { allow: "GET, HEAD" }).end();
         const page = dashboardPage(poller.snapshot, poller.config.suite, { lan: via === "lan" });
         return void res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(req.method === "HEAD" ? undefined : page);
+      }
+      if (url.pathname === "/favicon.svg") {
+        if (req.method !== "GET" && req.method !== "HEAD") return void res.writeHead(405, { allow: "GET, HEAD" }).end();
+        return void res.writeHead(200, { "content-type": "image/svg+xml; charset=utf-8", "cache-control": "public, max-age=86400", "x-content-type-options": "nosniff" })
+          .end(req.method === "HEAD" ? undefined : FAVICON);
       }
       if (isPublicPath(url.pathname)) {
         if (req.method !== "GET" && req.method !== "HEAD") return void res.writeHead(405, { allow: "GET, HEAD" }).end();

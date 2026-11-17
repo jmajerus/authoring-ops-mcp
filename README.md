@@ -74,6 +74,7 @@ every service lists, so a renamed or retired tool shows up as a finding before a
 |---|---|---|
 | `/` | anyone | the public page: services, findings by owner, terminology subscribers, skills. No addresses, no error text, no links to anything writable |
 | `/services/<name>` | anyone | one service's page: up or down, its version, its tools and which the skills call, its findings (summaries only), and, where another service keeps them, its numbers (for zotero-mcp, the library's items, collections, notes, and attachments from holdings-mcp's mirror; counts only, no library ID). The public page links here for a service with no public page of its own, such as zotero-mcp |
+| `/favicon.svg` | anyone | the pages' icon: a heartbeat on deep teal, in the siblings' style |
 | `/admin` | LAN | the same, with what each failing source said, the services' admin pages, the holdings worklist, and **Poll now** |
 | `POST /admin/poll` | LAN | the admin page's button: poll now, then back to `/admin`. Only with a browser's word that it came from this server's page (`Origin` or `Sec-Fetch-Site`) |
 | `/health` | LAN | this server's own health, under the contract, with the skills ref it carries |

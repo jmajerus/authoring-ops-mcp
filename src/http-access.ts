@@ -23,8 +23,8 @@ function privatePeer(address = '') {
 }
 const remoteKeys = new Map<string, JWTVerifyGetKey>();
 
-/** The pages anyone may see through the tunnel: the public page, and a service's page under /services/. */
-export const isPublicPath = (pathname: string) => pathname === '/' || /^\/services\/[^/]+$/.test(pathname);
+/** What anyone may see through the tunnel: the public page, a service's page under /services/, and their icon. */
+export const isPublicPath = (pathname: string) => pathname === '/' || pathname === '/favicon.svg' || /^\/services\/[^/]+$/.test(pathname);
 
 /** Private HTTP listener only. Public snapshot listeners must not use this guard. */
 export async function authorizeRequest(req: IncomingMessage, pathname: string, config: RequestAccessConfig, keys?: JWTVerifyGetKey) {

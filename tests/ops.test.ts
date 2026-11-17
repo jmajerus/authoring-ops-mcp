@@ -446,6 +446,12 @@ describe("the server", () => {
         "<code>three</code></td><td>called by the skills", "<code>four</code></td><td></td>", "called by the skills, not listed",
         "b-mcp no longer lists gone, which the skills call."]) expect(page).toContain(shown);
 
+      expect(page).toContain(`<link rel="icon" href="/favicon.svg" type="image/svg+xml">`);
+      const icon = await fetch(`${base}/favicon.svg`, tunnel);
+      expect([icon.status, icon.headers.get("content-type")]).toEqual([200, "image/svg+xml; charset=utf-8"]);
+      expect(await icon.text()).toMatch(/^<svg [\s\S]*<\/svg>$/);
+      expect((await fetch(`${base}/favicon.svg`, { method: "POST", ...tunnel })).status).toBe(405);
+
       expect((await fetch(`${base}/services/nobody`, tunnel)).status).toBe(404);
       expect((await fetch(`${base}/services/b-mcp`, { method: "POST", ...tunnel })).status).toBe(405);
       expect((await fetch(`${base}/services/b-mcp/x`, tunnel)).status).toBe(401);

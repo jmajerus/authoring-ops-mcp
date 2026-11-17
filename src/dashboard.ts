@@ -185,7 +185,7 @@ ${lines ? `<ul>${lines}</ul>` : ""}
 export const servicePath = (name: string) => `/services/${encodeURIComponent(name)}`;
 
 const pageHead = (title: string) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="60"><title>${esc(title)}</title><style>${STYLE}</style></head><body>`;
+<meta http-equiv="refresh" content="60"><title>${esc(title)}</title><link rel="icon" href="/favicon.svg" type="image/svg+xml"><style>${STYLE}</style></head><body>`;
 
 /**
  * One service, as this server sees it from the last poll: up or down, its version and tools, which of them the
