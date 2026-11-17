@@ -21,6 +21,8 @@ export interface ServiceConfig {
   upstream?: string;
   /** The fork the service runs, when it isn't upstream's own release: checked hourly against upstream. */
   fork?: ForkConfig;
+  /** Numbers about what the service serves, kept by another service (GET → { libraries: [...] }, as holdings-mcp's /api/zotero/stats). */
+  stats?: { url: string; owner: string };
   third_party: boolean;
 }
 
@@ -77,6 +79,10 @@ export function parseConfig(raw: unknown): SuiteConfig {
       if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error(`${name}.fork.repo must be owner/name, not ${JSON.stringify(repo)}.`);
       if (!githubRepo(service.upstream)) throw new Error(`${name}.fork needs upstream to be a github.com project URL, to compare against.`);
       service.fork = { repo, branch: text(s.fork.branch, `${name}.fork.branch`) };
+    }
+    if (s.stats !== undefined) {
+      if (!isObject(s.stats)) throw new Error(`${name}.stats must be { url, owner }.`);
+      service.stats = { url: httpUrl(s.stats.url, `${name}.stats.url`, true), owner: text(s.stats.owner, `${name}.stats.owner`) };
     }
     if (!service.health && !service.mcp) throw new Error(`${name} needs a health or an mcp URL: there is nothing to probe.`);
     return service;

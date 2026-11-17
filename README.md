@@ -41,6 +41,7 @@ uses that copy instead.
 | A cross-service check that isn't passing, one line each, linked to the worklist | as the check says | holdings-mcp's `/api/checks` |
 | A tool the skills call that its service no longer lists, or one they call that `tools-used.json` misses | fail / drift | the skills' `tools-used.json`, against each listing |
 | More tools across the suite than `tool_budget`, when the suite config sets one | drift | the listings |
+| A service's numbers that can't be read for five minutes | drift | its `stats` source |
 | Commits on a fork's branch that the service doesn't run yet (after an hour), or a service running a commit that isn't on its branch | drift | GitHub, against what `deploy:fork` recorded |
 
 The rest of the suite owns the facts. holdings-mcp runs the cross-service checks, because it holds the joins
@@ -51,7 +52,8 @@ every service, so one answer covers the suite. A source it can't read is a findi
 
 [suites/authoring.json](suites/authoring.json) names every service, its `/health` and MCP URLs, its
 repository, its admin and public pages, a third party's project (`upstream`), and the fork it runs, if any
-(`fork`: `{ repo, branch, deploy }`, where `deploy` says how `npm run deploy:fork` reaches it); where the
+(`fork`: `{ repo, branch, deploy }`, where `deploy` says how `npm run deploy:fork` reaches it), and where
+another service keeps its numbers (`stats`: `{ url, owner }`; zotero-mcp's are holdings-mcp's `/api/zotero/stats`); where the
 subscribers and checks are read; the routing lines in the instructions (`guidance`); the tool budget; and the skills ref a release carries. The code names none of them. `OPS_SUITE` chooses the file.
 
 Keep the guidance short: the portal joins every server's instructions and cuts the whole off at a length.
@@ -71,7 +73,7 @@ every service lists, so a renamed or retired tool shows up as a finding before a
 | Path | Who | What |
 |---|---|---|
 | `/` | anyone | the public page: services, findings by owner, terminology subscribers, skills. No addresses, no error text, no links to anything writable |
-| `/services/<name>` | anyone | one service's page: up or down, its version, its tools and which the skills call, and its findings (summaries only). The public page links here for a service with no public page of its own, such as zotero-mcp |
+| `/services/<name>` | anyone | one service's page: up or down, its version, its tools and which the skills call, its findings (summaries only), and, where another service keeps them, its numbers (for zotero-mcp, the library's items, collections, notes, and attachments from holdings-mcp's mirror; counts only, no library ID). The public page links here for a service with no public page of its own, such as zotero-mcp |
 | `/admin` | LAN | the same, with what each failing source said, the services' admin pages, the holdings worklist, and **Poll now** |
 | `POST /admin/poll` | LAN | the admin page's button: poll now, then back to `/admin`. Only with a browser's word that it came from this server's page (`Origin` or `Sec-Fetch-Site`) |
 | `/health` | LAN | this server's own health, under the contract, with the skills ref it carries |

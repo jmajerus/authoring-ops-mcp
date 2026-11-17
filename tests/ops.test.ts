@@ -8,7 +8,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config.js";
 import { ago, dashboardPage, servicePage } from "../src/dashboard.js";
-import { instructions } from "../src/mcp.js";
+import { instructions, statusOf } from "../src/mcp.js";
 import { Poller } from "../src/poller.js";
 import { type Installed, readInstalled } from "../src/github.js";
 import { readHealth } from "../src/probes.js";
@@ -22,7 +22,8 @@ const config = parseConfig({
   tool_budget: 10,
   services: [
     { name: "a-mcp", health: "http://a/health", mcp: "http://a/mcp", repo: "me/a-mcp", public: "https://a.example/" },
-    { name: "b-mcp", mcp: "http://b/mcp", third_party: true, upstream: "https://github.com/up/b", fork: { repo: "me/b", branch: "lan" } },
+    { name: "b-mcp", mcp: "http://b/mcp", third_party: true, upstream: "https://github.com/up/b", fork: { repo: "me/b", branch: "lan" },
+      stats: { url: "http://h/api/zotero/stats", owner: "me/h-mcp" } },
   ],
   subscribers: { url: "http://t/api/subscribers", owner: "me/t-mcp" },
   checks: { url: "http://h/api/checks", owner: "me/h-mcp", worklist: "http://h/worklist" },
@@ -50,6 +51,10 @@ function world(skills?: SkillSet, installed?: () => Record<string, Installed>) {
     tools: { "http://a/mcp": ["one", "two"], "http://b/mcp": ["three"] } as Record<string, string[] | { names: string[]; version?: string } | Error>,
     subscribers: { version: 7, subscribers: [{ id: "a-mcp", label: "A", schemes: ["s"], pending: 0, pendingBreaking: 0, blocked: null, lastSeen: "2026-11-16T11:59:00Z" }] } as unknown,
     checks: { checks: [{ name: "fine", result: "ok", count: 0, fix: "a-mcp", examples: [] }] } as unknown,
+    stats: { libraries: [{
+      library: "users/827407", version: 3637, synced_at: "2026-11-16T11:58:00Z", items: 1210, notes: 512, attachments: 268, annotations: 0, trashed: 3,
+      by_type: { book: 900, journalArticle: 250, webpage: 40, thesis: 20, "<script>": 1 }, collections: 42, searches: 1,
+    }] } as unknown,
     /** GitHub, by API path; an Error is thrown. */
     github: {
       "/repos/up/b": { default_branch: "main" },
@@ -69,7 +74,7 @@ function world(skills?: SkillSet, installed?: () => Record<string, Installed>) {
       return body;
     },
     fetchJson: async (url) => {
-      const body = url.endsWith("/health") ? w.health : url.includes("subscribers") ? w.subscribers : w.checks;
+      const body = url.endsWith("/health") ? w.health : url.includes("subscribers") ? w.subscribers : url.includes("/zotero/stats") ? w.stats : w.checks;
       if (body instanceof Error) throw body;
       return body;
     },
@@ -470,6 +475,29 @@ describe("the server", () => {
     const page = servicePage(poller.snapshot!, "b-mcp", [], w.now.getTime())!;
     for (const shown of [`Runs <a href="https://github.com/me/b/commit/${sha}">cb7d56d</a>, deployed`, `<a href="https://github.com/me/b/compare/${sha}...lan">2 commits on lan not deployed yet</a>`,
       `<a href="https://github.com/up/b/compare/main...${sha}">`]) expect(page).toContain(shown);
+  });
+
+  it("shows a library's numbers from the service that keeps them, and says when they can't be read", async () => {
+    const { w, poller } = world();
+    await poller.poll();
+    let page = servicePage(poller.snapshot!, "b-mcp", [], w.now.getTime())!;
+    for (const shown of ["<h2>Library <span class=\"s\">Personal library</span></h2>", "<strong>1,210</strong><span class=\"s\">items</span>",
+      "<strong>42</strong><span class=\"s\">collections</span>", "book 900 · journal article 250 · webpage 40 · thesis 20", "3 in the trash · 1 saved search · synced <span title=\"2026-11-16T11:58:00Z\">2 min</span> ago",
+      "From h-mcp's mirror of Zotero."]) expect(page).toContain(shown);
+    for (const hidden of ["827407", "<script>"]) expect(page).not.toContain(hidden);
+    expect(statusOf(poller.snapshot!).services.find((s) => s.name === "b-mcp")).toMatchObject({ libraries: [{ library: "users/827407", items: 1210, collections: 42 }] });
+
+    // Unreadable: the last numbers stay, marked, and after five minutes it's a finding for the owner.
+    w.stats = new Error("connect ECONNREFUSED");
+    w.tick(1);
+    await poller.poll();
+    page = servicePage(poller.snapshot!, "b-mcp", [], w.now.getTime())!;
+    expect(page).toContain("<strong>1,210</strong>");
+    expect(page).toMatch(/it isn't answering just now, so these are from <span[^>]*>1 min<\/span> ago/);
+    expect(page).not.toContain("ECONNREFUSED");
+    w.tick(6);
+    await poller.poll();
+    expect(poller.snapshot!.findings.find((f) => f.id === "source:stats:b-mcp")).toMatchObject({ severity: "drift", fix: "me/h-mcp", detail: "connect ECONNREFUSED" });
   });
 
   it("says how long ago in the nearest unit worth reading", () => {

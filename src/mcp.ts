@@ -33,6 +33,9 @@ export function statusOf(s: Snapshot) {
     services: s.services.map((v) => ({
       name: v.name, up: v.up, since: v.since,
       ...(v.health?.version ?? v.tools?.version ? { version: v.health?.version ?? v.tools?.version } : {}),
+      ...(v.stats?.libraries.length ? { libraries: v.stats.libraries.map((l) => ({
+        library: l.library, items: l.items, collections: l.collections, notes: l.notes, attachments: l.attachments, trashed: l.trashed, synced_at: l.synced_at,
+      })) } : {}),
       ...(v.fork ? { fork: {
         repo: v.fork.repo, branch: v.fork.branch, upstream: v.fork.upstream, checked_at: v.fork.checked_at,
         ...(v.fork.installed ? { installed: v.fork.installed } : {}), ...(v.fork.undeployed ? { undeployed: v.fork.undeployed } : {}),

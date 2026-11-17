@@ -1,6 +1,6 @@
 import type { ServiceConfig, SuiteConfig } from "./config.js";
 import type { ForkState } from "./github.js";
-import type { ChecksState, HealthState, SubscribersState, ToolsState } from "./probes.js";
+import type { ChecksState, HealthState, StatsState, SubscribersState, ToolsState } from "./probes.js";
 import type { SkillSet } from "./skills.js";
 import type { Store } from "./store.js";
 
@@ -16,6 +16,7 @@ export interface ServiceState {
   public?: string;
   upstream?: string;
   fork?: ForkState;
+  stats?: StatsState;
   third_party: boolean;
   up: boolean;
   since: string;
@@ -70,6 +71,9 @@ export function findFindings(
     const d = s.health?.deployed;
     if (d?.branch && d.branch !== "main") found.push({ id: `branch:${s.name}`, severity: "drift", fix, summary: `${s.name} is deployed from ${d.branch}, not main.`, first_seen: d.at });
     if (d?.dirty) found.push({ id: `dirty:${s.name}`, severity: "drift", fix, summary: `${s.name} was deployed from a checkout with uncommitted changes, so its commit doesn't say what it runs.`, first_seen: d.at });
+    if (s.stats && !s.stats.ok) {
+      found.push({ id: `source:stats:${s.name}`, severity: "drift", fix: s.stats.owner ?? fix, summary: `${s.name}'s numbers can't be read.`, detail: s.stats.error, after_minutes: 5 });
+    }
     const f = s.fork;
     if (f?.undeployed?.ahead) {
       found.push({

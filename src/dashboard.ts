@@ -1,5 +1,6 @@
 import type { Finding } from "./findings.js";
 import { type ForkState, forkLine } from "./github.js";
+import type { StatsState } from "./probes.js";
 import { VERSION } from "./mcp.js";
 import type { Snapshot } from "./poller.js";
 import { versionLabel } from "./skills.js";
@@ -49,7 +50,10 @@ code{font:.86rem ui-monospace,monospace}
 .pill{display:inline-block;border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:2px 10px;font-size:.84rem}
 .pill .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--danger)}
 .pill.up .dot{background:var(--ok)}.pill.stale .dot{background:var(--warn)}
-ul{margin:4px 0 0;padding-left:1.2rem}`;
+ul{margin:4px 0 0;padding-left:1.2rem}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:10px;margin:8px 0 12px}
+.card{border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:12px 14px}
+.card strong{display:block;font-size:1.5rem;line-height:1.3;font-variant-numeric:tabular-nums}`;
 
 function servicesTable(s: Snapshot, now: number, admin: boolean): string {
   const rows = s.services.map((v) => {
@@ -118,6 +122,31 @@ function adminSection(s: Snapshot, worklist: string | undefined): string {
 ${links ? `<ul>${links}</ul>` : ""}`;
 }
 
+const num = (n: number) => n.toLocaleString("en-US");
+/** "journalArticle" → "journal article". */
+const typeName = (t: string) => t.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+/** A library's name for a public page: which kind it is, not whose. */
+const libraryName = (l: string) => (l.startsWith("users/") ? "Personal library" : l.startsWith("groups/") ? "Group library" : "Library");
+
+/** What the service serves, in numbers another service keeps (holdings-mcp's mirror, for zotero-mcp). Counts only. */
+function statsSection(st: StatsState, owner: string | undefined, now: number): string {
+  if (!st.libraries.length) return `<h2>Library</h2><p class="s">${st.ok ? "No libraries reported." : "The numbers can't be read just now."}</p>`;
+  const many = st.libraries.length > 1;
+  const libs = st.libraries.map((l) => {
+    const card = (n: number | null, label: string) => (n === null ? "" : `<div class="card"><strong>${num(n)}</strong><span class="s">${esc(label)}</span></div>`);
+    const types = Object.entries(l.by_type).sort((a, b) => b[1] - a[1]);
+    const shown = types.slice(0, 8).map(([t, n]) => `${esc(typeName(t))} ${num(n)}`);
+    const rest = types.slice(8).reduce((n, [, c]) => n + c, 0);
+    return `${many ? `<h3>${esc(libraryName(l.library))}</h3>` : ""}
+<div class="cards">${card(l.items, "items")}${card(l.collections, "collections")}${card(l.notes, "notes")}${card(l.attachments, "attachments")}</div>
+${shown.length ? `<p class="s">${shown.join(" · ")}${rest ? ` · other ${num(rest)}` : ""}</p>` : ""}
+<p class="s">${[l.trashed ? `${num(l.trashed)} in the trash` : "", l.searches ? `${num(l.searches)} saved search${l.searches === 1 ? "" : "es"}` : "", l.synced_at ? `synced ${time(l.synced_at, now)} ago` : ""].filter(Boolean).join(" · ")}</p>`;
+  }).join("\n");
+  return `<h2>Library${many ? "" : ` <span class="s">${esc(libraryName(st.libraries[0].library))}</span>`}</h2>
+${libs}
+<p class="s">From ${esc(owner ?? "another service")}'s mirror of Zotero${st.ok ? "" : `; it isn't answering just now, so these are from ${time(st.ok_at, now)} ago`}.</p>`;
+}
+
 /** Which fork a service runs, and how far it is from upstream's latest release and default branch. */
 function forkSection(f: ForkState, running: string | undefined, now: number): string {
   const gh = (repo: string, path = "") => `https://github.com/${repo}${path}`;
@@ -169,6 +198,7 @@ export function servicePage(s: Snapshot, name: string, toolsUsed: string[] = [],
   return `${pageHead(`${name} · ${s.suite} suite`)}<p class="s"><a href="/">${esc(s.suite)} suite</a></p>
 <h1>${esc(name)} ${pill(v.up ? "up" : "down", v.up ? "up" : "down")} <span class="s">for ${time(v.since, now)}</span></h1>
 <p class="s">${about ? `${about}. ` : ""}Polled ${time(s.polled_at, now)} ago. Reloads every minute.</p>
+${v.stats ? statsSection(v.stats, v.stats.owner?.split("/").pop(), now) : ""}
 ${v.fork ? forkSection(v.fork, version, now) : ""}
 <h2>Tools <span class="s">${listed.length}${v.tools && !v.tools.ok ? ", from the last listing that answered" : ""}</span></h2>
 ${rows.length ? `<div class="wrap"><table><thead><tr><th>Tool</th><th></th></tr></thead><tbody>${rows.join("\n")}</tbody></table></div>` : `<p class="s">None listed.</p>`}

@@ -124,6 +124,38 @@ export async function probeSubscribers(url: string, get: FetchJson, at: string):
   }
 }
 
+/** One library in numbers, as holdings-mcp's GET /api/zotero/stats gives it. Counts only. */
+export interface LibraryStats {
+  library: string; items: number; notes: number; attachments: number; trashed: number;
+  by_type: Record<string, number>; collections: number | null; searches: number | null;
+  version?: number; synced_at: string | null;
+}
+export interface StatsState {
+  ok: boolean; error?: string; libraries: LibraryStats[]; checked_at: string; ok_at?: string;
+  /** The service that keeps the numbers, from the suite config. */
+  owner?: string;
+}
+
+const count = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : 0);
+const countOrNull = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : null);
+
+/** Reads a library-stats source. On failure the last good numbers are kept, marked not ok. */
+export async function probeStats(url: string, get: FetchJson, at: string, last?: StatsState): Promise<StatsState> {
+  try {
+    const body = await get(url);
+    if (!isObject(body) || !Array.isArray(body.libraries)) throw new Error("no libraries list in the answer");
+    const libraries = body.libraries.filter(isObject).filter((l) => typeof l.library === "string").map((l): LibraryStats => ({
+      library: l.library as string, items: count(l.items), notes: count(l.notes), attachments: count(l.attachments), trashed: count(l.trashed),
+      by_type: isObject(l.by_type) ? Object.fromEntries(Object.entries(l.by_type).filter(([k, v]) => /^[A-Za-z]+$/.test(k) && countOrNull(v) !== null)) as Record<string, number> : {},
+      collections: countOrNull(l.collections), searches: countOrNull(l.searches),
+      ...(typeof l.version === "number" ? { version: l.version } : {}), synced_at: str(l.synced_at) ?? null,
+    }));
+    return { ok: true, libraries, checked_at: at, ok_at: at };
+  } catch (error) {
+    return { ok: false, error: message(error), libraries: last?.libraries ?? [], checked_at: at, ...(last?.ok_at ? { ok_at: last.ok_at } : {}) };
+  }
+}
+
 export async function probeChecks(url: string, get: FetchJson, at: string): Promise<ChecksState> {
   try {
     const body = await get(url);

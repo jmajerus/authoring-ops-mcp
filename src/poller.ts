@@ -1,8 +1,8 @@
 import type { SuiteConfig } from "./config.js";
 import { type Finding, type ServiceState, findFindings, toolsTotal } from "./findings.js";
 import {
-  type ChecksState, type FetchJson, type ListTools, type SubscribersState, type ToolsState,
-  fetchJson, listTools, probeChecks, probeHealth, probeSubscribers, probeTools,
+  type ChecksState, type FetchJson, type ListTools, type StatsState, type SubscribersState, type ToolsState,
+  fetchJson, listTools, probeChecks, probeHealth, probeStats, probeSubscribers, probeTools,
 } from "./probes.js";
 import { type ForkState, type GitHubGet, type Installed, githubGet, githubRepo, probeFork } from "./github.js";
 import type { SkillSet, SkillsVersion } from "./skills.js";
@@ -39,6 +39,7 @@ export class Poller {
   private running: Promise<Snapshot> | undefined;
   private readonly tools = new Map<string, ToolsState>();
   private readonly forks = new Map<string, ForkState>();
+  private readonly stats = new Map<string, StatsState>();
   private readonly get: FetchJson;
   private readonly list: ListTools;
   private readonly github: GitHubGet;
@@ -85,25 +86,27 @@ export class Poller {
         const now = installed[service.name];
         // A deploy since the last check is news now, not in up to an hour.
         const forkFresh = lastFork && lastFork.installed?.commit === now?.commit && Date.parse(at) - Date.parse(lastFork.checked_at) < FORK_SECONDS * 1000;
-        const [health, tools, fork] = await Promise.all([
+        const [health, tools, fork, stats] = await Promise.all([
           service.health ? probeHealth(service.health, this.get, at) : undefined,
           !service.mcp ? undefined : service.health && fresh ? last : probeTools(service.mcp, this.list, at, last),
           !service.fork ? undefined : forkFresh ? lastFork : probeFork(githubRepo(service.upstream)!, service.fork, this.github, at, lastFork, now),
+          service.stats ? probeStats(service.stats.url, this.get, at, this.stats.get(service.name)) : undefined,
         ]);
         if (tools) this.tools.set(service.name, tools);
         if (fork) this.forks.set(service.name, fork);
-        return { service, health, tools, fork };
+        if (stats) this.stats.set(service.name, stats);
+        return { service, health, tools, fork, stats };
       })),
       config.subscribers ? probeSubscribers(config.subscribers.url, this.get, at) : undefined,
       config.checks ? probeChecks(config.checks.url, this.get, at) : undefined,
     ]);
-    const services = probed.map(({ service, health, tools, fork }): ServiceState => {
+    const services = probed.map(({ service, health, tools, fork, stats }): ServiceState => {
       const up = health ? health.ok : tools?.ok === true;
       const admin = health?.admin ?? service.admin;
       return {
         name: service.name, third_party: service.third_party, up, since: this.store.since(service.name, up, at),
         ...(service.repo ? { repo: service.repo } : {}), ...(admin ? { admin } : {}),
-        ...(service.public ? { public: service.public } : {}), ...(service.upstream ? { upstream: service.upstream } : {}), ...(fork ? { fork } : {}), ...(health ? { health } : {}), ...(tools ? { tools } : {}),
+        ...(service.public ? { public: service.public } : {}), ...(service.upstream ? { upstream: service.upstream } : {}), ...(fork ? { fork } : {}), ...(stats ? { stats: { ...stats, owner: service.stats!.owner } } : {}), ...(health ? { health } : {}), ...(tools ? { tools } : {}),
       };
     });
     const findings = findFindings(config, services, subscribers, checks, this.store, at, this.skills);
