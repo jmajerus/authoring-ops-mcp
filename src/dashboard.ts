@@ -63,8 +63,9 @@ function servicesTable(s: Snapshot, now: number, admin: boolean): string {
     // The public page links each service's own public page; the admin page links the code.
     const repo = admin && v.repo ? `https://github.com/${v.repo}` : undefined;
     const commit = d?.commit ? link(repo && `${repo}/commit/${d.commit}`, d.commit.slice(0, 7)) : "";
-    return `<tr><td>${link(admin ? repo : v.public, v.name)}</td><td>${pill(v.up ? "up" : "down", v.up ? "up" : "down")} <span class="s">${time(v.since, now)}</span></td>
-<td>${esc(v.health?.version)}</td><td><code>${commit}</code></td><td>${time(d?.at, now)}</td>
+    const name = admin ? link(repo, v.name) : v.public ? link(v.public, v.name) : `<a href="${esc(servicePath(v.name))}">${esc(v.name)}</a>`;
+    return `<tr><td>${name}</td><td>${pill(v.up ? "up" : "down", v.up ? "up" : "down")} <span class="s">${time(v.since, now)}</span></td>
+<td>${esc(v.health?.version ?? v.tools?.version)}</td><td><code>${commit}</code></td><td>${time(d?.at, now)}</td>
 <td class="n">${v.tools ? v.tools.names.length : ""}</td><td class="w">${notes}</td>${admin ? `<td>${v.admin ? link(v.admin, "admin") : ""}</td>` : ""}</tr>`;
   }).join("\n");
   return `<div class="wrap"><table><thead><tr><th>Service</th><th>State, for</th><th>Version</th><th>Commit</th><th>Deployed</th><th class="n">Tools</th><th></th>${admin ? "<th></th>" : ""}</tr></thead>
@@ -115,10 +116,45 @@ function adminSection(s: Snapshot, worklist: string | undefined): string {
 ${links ? `<ul>${links}</ul>` : ""}`;
 }
 
+/** Where this server serves a service's own page: for one with no public page of its own, a third party's say. */
+export const servicePath = (name: string) => `/services/${encodeURIComponent(name)}`;
+
+const pageHead = (title: string) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="60"><title>${esc(title)}</title><style>${STYLE}</style></head><body>`;
+
+/**
+ * One service, as this server sees it from the last poll: up or down, its version and tools, which of them the
+ * skills call, and its findings. Public, so as safe as the public page: summaries only, no addresses or errors.
+ */
+export function servicePage(s: Snapshot, name: string, toolsUsed: string[] = [], now = Date.now()): string | undefined {
+  const v = s.services.find((x) => x.name === name);
+  if (!v) return undefined;
+  const listed = v.tools?.names ?? [];
+  const called = new Set(toolsUsed);
+  const rows = listed.map((t) => `<tr><td><code>${esc(t)}</code></td><td>${called.has(t) ? "called by the skills" : ""}</td></tr>`);
+  const gone = toolsUsed.filter((t) => v.tools?.ok && !listed.includes(t));
+  rows.push(...gone.map((t) => `<tr><td><code>${esc(t)}</code></td><td>${pill("down", "called by the skills, not listed")}</td></tr>`));
+  const findings = s.findings.filter((f) => f.id.split(":").includes(name));
+  const version = v.health?.version ?? v.tools?.version;
+  const about = [
+    v.third_party ? "A third-party server" : "",
+    version ? `version ${esc(version)}` : "",
+    v.upstream ? link(v.upstream, "its project") : "",
+    v.public ? link(v.public, "its own page") : "",
+  ].filter(Boolean).join(" · ");
+  return `${pageHead(`${name} · ${s.suite} suite`)}<p class="s"><a href="/">${esc(s.suite)} suite</a></p>
+<h1>${esc(name)} ${pill(v.up ? "up" : "down", v.up ? "up" : "down")} <span class="s">for ${time(v.since, now)}</span></h1>
+<p class="s">${about ? `${about}. ` : ""}Polled ${time(s.polled_at, now)} ago. Reloads every minute.</p>
+<h2>Tools <span class="s">${listed.length}${v.tools && !v.tools.ok ? ", from the last listing that answered" : ""}</span></h2>
+${rows.length ? `<div class="wrap"><table><thead><tr><th>Tool</th><th></th></tr></thead><tbody>${rows.join("\n")}</tbody></table></div>` : `<p class="s">None listed.</p>`}
+<h2>Findings</h2>
+${findings.length ? `<ul>${findings.map((f) => `<li>${pill(f.severity === "fail" ? "down" : "stale", f.severity)} ${esc(f.summary)} <span class="s">${time(f.first_seen, now)}</span></li>`).join("\n")}</ul>` : `<p>${pill("up", "none open")}</p>`}
+</body></html>`;
+}
+
 export function dashboardPage(s: Snapshot | undefined, suite: string, options: PageOptions & { worklist?: string } = {}): string {
   const { admin = false, lan = false, now = Date.now() } = options;
-  const head = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="60"><title>${esc(suite)} ops${admin ? " admin" : ""}</title><style>${STYLE}</style></head><body>`;
+  const head = pageHead(`${suite} ops${admin ? " admin" : ""}`);
   if (!s) return `${head}<h1>${esc(suite)} suite</h1><p class="s">The first poll is still running. This page reloads by itself.</p></body></html>`;
   const down = s.services.filter((v) => !v.up).length;
   const fails = s.findings.filter((f) => f.severity === "fail").length;

@@ -49,7 +49,7 @@ every service, so one answer covers the suite. A source it can't read is a findi
 ## The suite
 
 [suites/authoring.json](suites/authoring.json) names every service, its `/health` and MCP URLs, its
-repository, and its admin and public pages; where the subscribers and checks are read; the routing lines in the instructions (`guidance`); the
+repository, its admin and public pages, and a third party's project (`upstream`); where the subscribers and checks are read; the routing lines in the instructions (`guidance`); the
 tool budget; and the skills ref a release carries. The code names none of them. `OPS_SUITE` chooses the file.
 
 Keep the guidance short: the portal joins every server's instructions and cuts the whole off at a length.
@@ -69,6 +69,7 @@ every service lists, so a renamed or retired tool shows up as a finding before a
 | Path | Who | What |
 |---|---|---|
 | `/` | anyone | the public page: services, findings by owner, terminology subscribers, skills. No addresses, no error text, no links to anything writable |
+| `/services/<name>` | anyone | one service's page: up or down, its version, its tools and which the skills call, and its findings (summaries only). The public page links here for a service with no public page of its own, such as zotero-mcp |
 | `/admin` | LAN | the same, with what each failing source said, the services' admin pages, the holdings worklist, and **Poll now** |
 | `POST /admin/poll` | LAN | the admin page's button: poll now, then back to `/admin`. Only with a browser's word that it came from this server's page (`Origin` or `Sec-Fetch-Site`) |
 | `/health` | LAN | this server's own health, under the contract, with the skills ref it carries |
@@ -84,8 +85,10 @@ token, and everything else is a 404. Like the other servers, this one has two ho
 portal). Keep that application on the whole host: scoped to `/mcp`, it stops answering the OAuth discovery
 addresses at the host's root (`/.well-known/oauth-protected-resource` and the rest), and MCP clients can't sign in.
 
-The public page links each service's name to its own public page (`public` in the suite config); `/admin` links
-it to the repository, and each deployed commit to that commit.
+The public page links each service's name to its own public page (`public` in the suite config), or, for one
+with none, to its page here under `/services/`; `/admin` links it to the repository, and each deployed commit to
+that commit. A service without `/health` (a third party) gets its version from what it reports when a client
+connects for the tool listing.
 
 A finding keeps its `summary` safe for the public page and puts what the failing source said (an error, a
 reason) in `detail`, which `/admin` and the `findings` tool show.

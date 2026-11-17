@@ -4,7 +4,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 /** What this server reads from the others, and the shapes it keeps. Every read is a GET or an MCP tools/list. */
 
 export type FetchJson = (url: string) => Promise<unknown>;
-export type ListTools = (url: string) => Promise<string[]>;
+/** A service's tool names, and the version it gives when a client connects (a third party has no /health to say). */
+export type ListTools = (url: string) => Promise<string[] | { names: string[]; version?: string }>;
 
 export const fetchJson: FetchJson = async (url) => {
   const response = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(5000) });
@@ -25,7 +26,8 @@ export const listTools: ListTools = async (url) => {
       names.push(...page.tools.map((t) => t.name));
       cursor = page.nextCursor;
     } while (cursor);
-    return names.sort();
+    const version = client.getServerVersion()?.version;
+    return { names: names.sort(), ...(version ? { version } : {}) };
   } finally {
     await client.close().catch(() => {});
   }
@@ -44,7 +46,7 @@ export interface HealthState {
   checked_at: string;
 }
 
-export interface ToolsState { ok: boolean; error?: string; names: string[]; checked_at: string; ok_at?: string }
+export interface ToolsState { ok: boolean; error?: string; names: string[]; version?: string; checked_at: string; ok_at?: string }
 
 export interface Subscriber {
   id: string; label: string; schemes: string[]; pending: number; pending_breaking: number;
@@ -92,9 +94,14 @@ export async function probeHealth(url: string, get: FetchJson, at: string): Prom
 /** Lists a service's tools. On failure the last good listing's names are kept, marked not ok. */
 export async function probeTools(url: string, list: ListTools, at: string, last?: ToolsState): Promise<ToolsState> {
   try {
-    return { ok: true, names: await list(url), checked_at: at, ok_at: at };
+    const got = await list(url);
+    const { names, version } = Array.isArray(got) ? { names: got, version: undefined } : got;
+    return { ok: true, names, ...(version ? { version: String(version) } : {}), checked_at: at, ok_at: at };
   } catch (error) {
-    return { ok: false, error: message(error), names: last?.names ?? [], checked_at: at, ...(last?.ok_at ? { ok_at: last.ok_at } : {}) };
+    return {
+      ok: false, error: message(error), names: last?.names ?? [], ...(last?.version ? { version: last.version } : {}),
+      checked_at: at, ...(last?.ok_at ? { ok_at: last.ok_at } : {}),
+    };
   }
 }
 

@@ -162,7 +162,9 @@ The two skill tools are registered only when the release carries skills.
   `authoring-ops-mcp.majerus.us`. Scoping that application to `/mcp` instead (tried 2026-11-17) took the OAuth
   discovery addresses at the host's root out of Access, and every server's sign-in failed. `/admin`, `/health`,
   and `/api/*` are LAN only; `/mcp` goes through Access. The page links each service's own public page
-  (`public` in the suite config), not its repository.
+  (`public` in the suite config), not its repository. A service with no public page of its own gets one here, at
+  `/services/<name>`, rather than a page added to its host: zotero-mcp is a third party's, and a page beside it on
+  its LXC would belong to no repository.
 - **Deploy has no `--main` yet.** It deploys the current checkout and records `dirty`, as holdings-mcp's does.
   corpus-mcp's `--main`, `--pr`, and `--current` can come once the repository has a remote.
 

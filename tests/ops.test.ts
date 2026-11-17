@@ -21,7 +21,7 @@ const config = parseConfig({
   tool_budget: 10,
   services: [
     { name: "a-mcp", health: "http://a/health", mcp: "http://a/mcp", repo: "me/a-mcp", public: "https://a.example/" },
-    { name: "b-mcp", mcp: "http://b/mcp", third_party: true },
+    { name: "b-mcp", mcp: "http://b/mcp", third_party: true, upstream: "https://upstream.example/b" },
   ],
   subscribers: { url: "http://t/api/subscribers", owner: "me/t-mcp" },
   checks: { url: "http://h/api/checks", owner: "me/h-mcp", worklist: "http://h/worklist" },
@@ -46,7 +46,7 @@ function world(skills?: SkillSet) {
     now: new Date("2026-11-16T12:00:00Z"),
     listed: 0,
     health: { ok: true, version: "1.0.0", deployed: { branch: "main", commit: "abcdef0123456789", at: "2026-11-15T12:00:00Z" } } as unknown,
-    tools: { "http://a/mcp": ["one", "two"], "http://b/mcp": ["three"] } as Record<string, string[] | Error>,
+    tools: { "http://a/mcp": ["one", "two"], "http://b/mcp": ["three"] } as Record<string, string[] | { names: string[]; version?: string } | Error>,
     subscribers: { version: 7, subscribers: [{ id: "a-mcp", label: "A", schemes: ["s"], pending: 0, pendingBreaking: 0, blocked: null, lastSeen: "2026-11-16T11:59:00Z" }] } as unknown,
     checks: { checks: [{ name: "fine", result: "ok", count: 0, fix: "a-mcp", examples: [] }] } as unknown,
     tick(minutes: number) { w.now = new Date(w.now.getTime() + minutes * 60_000); },
@@ -369,6 +369,34 @@ describe("the server", () => {
       expect([posted.status, posted.headers.get("location")]).toEqual([303, "/admin"]);
       expect(poller.snapshot!.polled_at).not.toBe(polled);
       expect((await fetch(`${base}/admin/poll`, { method: "POST", headers: { "cf-ray": "x" } })).status).toBe(401);
+    } finally {
+      server.close();
+    }
+  });
+
+  it("serves a public page for a service with none of its own, and links the dashboard to it", async () => {
+    const { w, poller } = world(loadSkills(skillsDir({ "a-mcp": ["one"], "b-mcp": ["three", "gone"] })));
+    w.tools["http://b/mcp"] = { names: ["three", "four"], version: "0.15.1" };
+    await poller.poll();
+    const server = await serveHttp(poller, { host: "127.0.0.1", port: 0, stateDir: "/nonexistent", access: NO_TEAM });
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const tunnel = { headers: { "cf-ray": "x" } };
+    try {
+      const home = await (await fetch(`${base}/`, tunnel)).text();
+      expect(home).toContain(`<a href="/services/b-mcp">b-mcp</a>`);
+      expect(home).toContain("<td>0.15.1</td>");
+
+      const res = await fetch(`${base}/services/b-mcp`, tunnel);
+      expect(res.status).toBe(200);
+      const page = await res.text();
+      for (const shown of ["A third-party server", "version 0.15.1", `<a href="https://upstream.example/b">its project</a>`,
+        "<code>three</code></td><td>called by the skills", "<code>four</code></td><td></td>", "called by the skills, not listed",
+        "b-mcp no longer lists gone, which the skills call."]) expect(page).toContain(shown);
+
+      expect((await fetch(`${base}/services/nobody`, tunnel)).status).toBe(404);
+      expect((await fetch(`${base}/services/b-mcp`, { method: "POST", ...tunnel })).status).toBe(405);
+      expect((await fetch(`${base}/services/b-mcp/x`, tunnel)).status).toBe(401);
+      expect((await fetch(`${base}/services/b-mcp`, { headers: { "cf-ray": "x", "cf-access-jwt-assertion": "forged" } })).status).toBe(503);
     } finally {
       server.close();
     }

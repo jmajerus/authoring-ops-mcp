@@ -4,15 +4,16 @@ import path from "node:path";
 import type { JWTVerifyGetKey } from "jose";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { dashboardPage } from "./dashboard.js";
-import { AccessError, authorizeRequest, requestAccessConfig, type RequestAccessConfig } from "./http-access.js";
+import { dashboardPage, servicePage } from "./dashboard.js";
+import { AccessError, authorizeRequest, isPublicPath, requestAccessConfig, type RequestAccessConfig } from "./http-access.js";
 import { VERSION, createServer } from "./mcp.js";
 import type { Poller } from "./poller.js";
 
 /**
  * Streamable HTTP at /mcp (stateless: a fresh server per request, JSON responses), on holdings-mcp's pattern.
  * /mcp is open on the LAN and, through Cloudflare, to a verified Access token. The public page at / is for
- * anyone the tunnel lets through, with or without a token: it shows nothing a stranger shouldn't see.
+ * anyone the tunnel lets through, with or without a token: it shows nothing a stranger shouldn't see. So is
+ * /services/<name>, one service's page (for a third party, the only page it has).
  * Everything else is LAN only (a 404 through the tunnel): the admin page at /admin and its POST /admin/poll,
  * /health, GET /api/status (the last poll in full), and POST /api/poll (poll now, e.g. after a deploy).
  */
@@ -67,6 +68,14 @@ export function serveHttp(poller: Poller, options: ServeOptions): Promise<http.S
       if (url.pathname === "/") {
         if (req.method !== "GET" && req.method !== "HEAD") return void res.writeHead(405, { allow: "GET, HEAD" }).end();
         const page = dashboardPage(poller.snapshot, poller.config.suite, { lan: via === "lan" });
+        return void res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(req.method === "HEAD" ? undefined : page);
+      }
+      if (isPublicPath(url.pathname)) {
+        if (req.method !== "GET" && req.method !== "HEAD") return void res.writeHead(405, { allow: "GET, HEAD" }).end();
+        let name: string;
+        try { name = decodeURIComponent(url.pathname.slice("/services/".length)); } catch { return void res.writeHead(404).end(); }
+        const page = poller.snapshot && servicePage(poller.snapshot, name, poller.skills?.toolsUsed?.[name]);
+        if (!page) return void res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("No such service in this suite, or no poll yet.");
         return void res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(req.method === "HEAD" ? undefined : page);
       }
       if (url.pathname !== "/mcp") {

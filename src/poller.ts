@@ -83,7 +83,7 @@ export class Poller {
       return {
         name: service.name, third_party: service.third_party, up, since: this.store.since(service.name, up, at),
         ...(service.repo ? { repo: service.repo } : {}), ...(admin ? { admin } : {}),
-        ...(service.public ? { public: service.public } : {}), ...(health ? { health } : {}), ...(tools ? { tools } : {}),
+        ...(service.public ? { public: service.public } : {}), ...(service.upstream ? { upstream: service.upstream } : {}), ...(health ? { health } : {}), ...(tools ? { tools } : {}),
       };
     });
     const findings = findFindings(config, services, subscribers, checks, this.store, at, this.skills);

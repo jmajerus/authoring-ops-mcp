@@ -13,6 +13,7 @@ export interface ServiceState {
   repo?: string;
   admin?: string;
   public?: string;
+  upstream?: string;
   third_party: boolean;
   up: boolean;
   since: string;
