@@ -11,7 +11,7 @@
     { "name": "terminology-mcp", "health": "http://terminology-mcp.localdomain:8000/health", "mcp": "http://terminology-mcp.localdomain:8000/mcp", "repo": "jmajerus/terminology-mcp", "public": "https://terminology.majerus.us/" },
     { "name": "holdings-mcp", "health": "http://holdings-mcp.localdomain:8000/health", "mcp": "http://holdings-mcp.localdomain:8000/mcp", "repo": "jmajerus/holdings-mcp", "public": "https://holdings.majerus.us/", "admin": "http://holdings-mcp.localdomain:8000/admin" },
     { "name": "iasp-mcp", "health": "http://iasp-mcp.localdomain:8000/health", "mcp": "http://iasp-mcp.localdomain:8000/mcp", "repo": "jmajerus/iasp-mcp", "public": "https://iasp.majerus.us/" },
-    { "name": "zotero-mcp", "mcp": "http://zotero-mcp.localdomain:8000/mcp", "third_party": true, "upstream": "https://github.com/54yyyu/zotero-mcp" }
+    { "name": "zotero-mcp", "mcp": "http://zotero-mcp.localdomain:8000/mcp", "third_party": true, "upstream": "https://github.com/54yyyu/zotero-mcp", "fork": { "repo": "jmajerus/zotero-mcp", "branch": "lan" } }
   ],
   "subscribers": {
     "url": "http://terminology-mcp.localdomain:8000/api/subscribers",

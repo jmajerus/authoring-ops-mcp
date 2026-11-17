@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { type ForkConfig, githubRepo } from "./github.js";
 
 /**
  * The suite this server watches. The code names no service: everything it probes comes from this file
@@ -18,6 +19,8 @@ export interface ServiceConfig {
   public?: string;
   /** Where a third party's project lives, for its page here. */
   upstream?: string;
+  /** The fork the service runs, when it isn't upstream's own release: checked hourly against upstream. */
+  fork?: ForkConfig;
   third_party: boolean;
 }
 
@@ -68,6 +71,13 @@ export function parseConfig(raw: unknown): SuiteConfig {
       public: httpUrl(s.public, `${name}.public`), upstream: httpUrl(s.upstream, `${name}.upstream`),
       repo: s.repo === undefined ? undefined : text(s.repo, `${name}.repo`),
     };
+    if (s.fork !== undefined) {
+      if (!isObject(s.fork)) throw new Error(`${name}.fork must be { repo, branch }.`);
+      const repo = text(s.fork.repo, `${name}.fork.repo`);
+      if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error(`${name}.fork.repo must be owner/name, not ${JSON.stringify(repo)}.`);
+      if (!githubRepo(service.upstream)) throw new Error(`${name}.fork needs upstream to be a github.com project URL, to compare against.`);
+      service.fork = { repo, branch: text(s.fork.branch, `${name}.fork.branch`) };
+    }
     if (!service.health && !service.mcp) throw new Error(`${name} needs a health or an mcp URL: there is nothing to probe.`);
     return service;
   });

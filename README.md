@@ -49,7 +49,8 @@ every service, so one answer covers the suite. A source it can't read is a findi
 ## The suite
 
 [suites/authoring.json](suites/authoring.json) names every service, its `/health` and MCP URLs, its
-repository, its admin and public pages, and a third party's project (`upstream`); where the subscribers and checks are read; the routing lines in the instructions (`guidance`); the
+repository, its admin and public pages, a third party's project (`upstream`), and the fork it runs, if any
+(`fork`: `{ repo, branch }`); where the subscribers and checks are read; the routing lines in the instructions (`guidance`); the
 tool budget; and the skills ref a release carries. The code names none of them. `OPS_SUITE` chooses the file.
 
 Keep the guidance short: the portal joins every server's instructions and cuts the whole off at a length.
@@ -89,6 +90,11 @@ The public page links each service's name to its own public page (`public` in th
 with none, to its page here under `/services/`; `/admin` links it to the repository, and each deployed commit to
 that commit. A service without `/health` (a third party) gets its version from what it reports when a client
 connects for the tool listing.
+
+For a service run from a fork, the server checks GitHub hourly: how many commits the fork's branch is ahead of
+and behind upstream's latest release, and upstream's default branch. The public page, the service's page, and
+`status` show it. It isn't a finding, since a fork behind upstream isn't wrong; it's there for deciding when to
+rebase before the next change. It needs no token (four requests an hour); `GITHUB_TOKEN`, if set, is sent.
 
 A finding keeps its `summary` safe for the public page and puts what the failing source said (an error, a
 reason) in `detail`, which `/admin` and the `findings` tool show.

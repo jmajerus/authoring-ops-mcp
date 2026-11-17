@@ -7,7 +7,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config.js";
-import { ago, dashboardPage } from "../src/dashboard.js";
+import { ago, dashboardPage, servicePage } from "../src/dashboard.js";
 import { instructions } from "../src/mcp.js";
 import { Poller } from "../src/poller.js";
 import { readHealth } from "../src/probes.js";
@@ -21,7 +21,7 @@ const config = parseConfig({
   tool_budget: 10,
   services: [
     { name: "a-mcp", health: "http://a/health", mcp: "http://a/mcp", repo: "me/a-mcp", public: "https://a.example/" },
-    { name: "b-mcp", mcp: "http://b/mcp", third_party: true, upstream: "https://upstream.example/b" },
+    { name: "b-mcp", mcp: "http://b/mcp", third_party: true, upstream: "https://github.com/up/b", fork: { repo: "me/b", branch: "lan" } },
   ],
   subscribers: { url: "http://t/api/subscribers", owner: "me/t-mcp" },
   checks: { url: "http://h/api/checks", owner: "me/h-mcp", worklist: "http://h/worklist" },
@@ -49,10 +49,24 @@ function world(skills?: SkillSet) {
     tools: { "http://a/mcp": ["one", "two"], "http://b/mcp": ["three"] } as Record<string, string[] | { names: string[]; version?: string } | Error>,
     subscribers: { version: 7, subscribers: [{ id: "a-mcp", label: "A", schemes: ["s"], pending: 0, pendingBreaking: 0, blocked: null, lastSeen: "2026-11-16T11:59:00Z" }] } as unknown,
     checks: { checks: [{ name: "fine", result: "ok", count: 0, fix: "a-mcp", examples: [] }] } as unknown,
+    /** GitHub, by API path; an Error is thrown. */
+    github: {
+      "/repos/up/b": { default_branch: "main" },
+      "/repos/up/b/releases/latest": { tag_name: "v2.0.0", published_at: "2026-11-15T00:00:00Z" },
+      "/repos/up/b/compare/main...me:b:lan": { ahead_by: 3, behind_by: 300 },
+      "/repos/up/b/compare/v2.0.0...me:b:lan": { ahead_by: 3, behind_by: 40 },
+    } as Record<string, unknown>,
+    githubCalls: 0,
     tick(minutes: number) { w.now = new Date(w.now.getTime() + minutes * 60_000); },
   };
   const poller = new Poller(config, new Store(), {
     clock: () => w.now, skills,
+    github: async (p) => {
+      w.githubCalls++;
+      const body = w.github[p];
+      if (body instanceof Error) throw body;
+      return body;
+    },
     fetchJson: async (url) => {
       const body = url.endsWith("/health") ? w.health : url.includes("subscribers") ? w.subscribers : w.checks;
       if (body instanceof Error) throw body;
@@ -75,6 +89,10 @@ describe("config", () => {
   it("rejects a service with nothing to probe, and a duplicate", () => {
     expect(() => parseConfig({ suite: "x", services: [{ name: "a" }] })).toThrow(/nothing to probe/);
     expect(() => parseConfig({ suite: "x", services: [{ name: "a", mcp: "http://a" }, { name: "a", mcp: "http://a" }] })).toThrow(/twice/);
+    const forked = (upstream: string, repo = "me/a") => () => parseConfig({ suite: "x", services: [{ name: "a", mcp: "http://a", upstream, fork: { repo, branch: "lan" } }] });
+    expect(forked("https://gitlab.com/up/a")).toThrow(/github\.com project/);
+    expect(forked("https://github.com/up/a", "me")).toThrow(/owner\/name/);
+    expect(forked("https://github.com/up/a")().services[0].fork).toEqual({ repo: "me/a", branch: "lan" });
     expect(() => parseConfig({ suite: "x", services: [{ name: "a", mcp: "ftp://a" }] })).toThrow(/http/);
   });
   it("reads the suite this repository ships", () => {
@@ -385,11 +403,14 @@ describe("the server", () => {
       const home = await (await fetch(`${base}/`, tunnel)).text();
       expect(home).toContain(`<a href="/services/b-mcp">b-mcp</a>`);
       expect(home).toContain("<td>0.15.1</td>");
+      expect(home).toContain("fork: 3 ahead, 40 behind v2.0.0");
 
       const res = await fetch(`${base}/services/b-mcp`, tunnel);
       expect(res.status).toBe(200);
       const page = await res.text();
-      for (const shown of ["A third-party server", "version 0.15.1", `<a href="https://upstream.example/b">its project</a>`,
+      for (const shown of ["A third-party server", "version 0.15.1", `<a href="https://github.com/up/b">its project</a>`,
+        `Runs <a href="https://github.com/me/b/tree/lan">me/b lan</a>, a fork of <a href="https://github.com/up/b">up/b</a>.`,
+        "v2.0.0</a> <span class=\"s\">(", ": 3 commits ahead, 40 behind.", `<a href="https://github.com/up/b/compare/main...me:b:lan">3 commits ahead, 300 behind</a>`,
         "<code>three</code></td><td>called by the skills", "<code>four</code></td><td></td>", "called by the skills, not listed",
         "b-mcp no longer lists gone, which the skills call."]) expect(page).toContain(shown);
 
@@ -400,6 +421,26 @@ describe("the server", () => {
     } finally {
       server.close();
     }
+  });
+
+  it("checks a fork against upstream hourly, and keeps the last numbers when GitHub doesn't answer", async () => {
+    const { w, poller } = world();
+    const fork = () => poller.snapshot!.services.find((s) => s.name === "b-mcp")!.fork!;
+    await poller.poll();
+    expect(fork()).toMatchObject({ ok: true, upstream: "up/b", release: { tag: "v2.0.0", ahead: 3, behind: 40 }, head: { branch: "main", ahead: 3, behind: 300 } });
+    const calls = w.githubCalls;
+    w.tick(30);
+    await poller.poll();
+    expect(w.githubCalls).toBe(calls);
+
+    w.github["/repos/up/b"] = new Error("GitHub: HTTP 403");
+    w.tick(31);
+    await poller.poll();
+    expect(fork()).toMatchObject({ ok: false, error: "GitHub: HTTP 403", release: { behind: 40 } });
+    expect(poller.snapshot!.findings.map((f) => f.id).filter((id) => id.includes("fork"))).toEqual([]);
+    const page = servicePage(poller.snapshot!, "b-mcp")!;
+    expect(page).toContain("That check didn't answer; these are from the last one that did.");
+    expect(page).not.toContain("403");
   });
 
   it("says how long ago in the nearest unit worth reading", () => {

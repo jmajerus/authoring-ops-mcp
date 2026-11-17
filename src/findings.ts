@@ -1,4 +1,5 @@
 import type { ServiceConfig, SuiteConfig } from "./config.js";
+import type { ForkState } from "./github.js";
 import type { ChecksState, HealthState, SubscribersState, ToolsState } from "./probes.js";
 import type { SkillSet } from "./skills.js";
 import type { Store } from "./store.js";
@@ -14,6 +15,7 @@ export interface ServiceState {
   admin?: string;
   public?: string;
   upstream?: string;
+  fork?: ForkState;
   third_party: boolean;
   up: boolean;
   since: string;

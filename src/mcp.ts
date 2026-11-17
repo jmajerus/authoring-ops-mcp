@@ -32,7 +32,12 @@ export function statusOf(s: Snapshot) {
     polled_at: s.polled_at,
     services: s.services.map((v) => ({
       name: v.name, up: v.up, since: v.since,
-      ...(v.health?.version ? { version: v.health.version } : {}),
+      ...(v.health?.version ?? v.tools?.version ? { version: v.health?.version ?? v.tools?.version } : {}),
+      ...(v.fork ? { fork: {
+        repo: v.fork.repo, branch: v.fork.branch, upstream: v.fork.upstream, checked_at: v.fork.checked_at,
+        ...(v.fork.release ? { release: v.fork.release } : {}), ...(v.fork.head ? { head: v.fork.head } : {}),
+        ...(!v.fork.ok ? { error: v.fork.error } : {}),
+      } } : {}),
       ...(v.health?.deployed ? { deployed: {
         ...(v.health.deployed.branch ? { branch: v.health.deployed.branch } : {}),
         ...(v.health.deployed.commit ? { commit: v.health.deployed.commit.slice(0, 7) } : {}),
@@ -59,7 +64,7 @@ export function createServer(poller: Poller): McpServer {
 
   server.registerTool("status", {
     title: "Suite status",
-    description: "Every service in the suite in one answer: up or down and since when, version, deployed branch and commit, and how many tools it lists; each terminology subscriber's lag; the suite's tool total; and the count of open findings (list them with findings). From the last poll, at most a minute or so old.",
+    description: "Every service in the suite in one answer: up or down and since when, version, deployed branch and commit, how many tools it lists, and, for a service run from a fork, how far the fork is ahead of and behind upstream (checked hourly); each terminology subscriber's lag; the suite's tool total; and the count of open findings (list them with findings). From the last poll, at most a minute or so old.",
     inputSchema: {},
     annotations: readOnly,
   }, async () => json(statusOf(await poller.current())));

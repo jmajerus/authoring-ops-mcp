@@ -1,4 +1,5 @@
 import type { Finding } from "./findings.js";
+import { type ForkState, forkLine } from "./github.js";
 import { VERSION } from "./mcp.js";
 import type { Snapshot } from "./poller.js";
 import { versionLabel } from "./skills.js";
@@ -58,6 +59,7 @@ function servicesTable(s: Snapshot, now: number, admin: boolean): string {
       d?.dirty ? pill("stale", "uncommitted changes") : "",
       v.up && v.tools && !v.tools.ok ? pill("down", "no tool listing") : "",
       v.third_party ? `<span class="s">third party</span>` : "",
+      v.fork && forkLine(v.fork) ? `<span class="s">fork: ${esc(forkLine(v.fork))}</span>` : "",
       admin && !v.up ? `<span class="s">${esc(v.health?.error ?? v.tools?.error)}</span>` : "",
     ].filter(Boolean).join(" ");
     // The public page links each service's own public page; the admin page links the code.
@@ -116,6 +118,21 @@ function adminSection(s: Snapshot, worklist: string | undefined): string {
 ${links ? `<ul>${links}</ul>` : ""}`;
 }
 
+/** Which fork a service runs, and how far it is from upstream's latest release and default branch. */
+function forkSection(f: ForkState, running: string | undefined, now: number): string {
+  const gh = (repo: string, path = "") => `https://github.com/${repo}${path}`;
+  const count = (c: { ahead: number; behind: number }) => `${c.ahead} commit${c.ahead === 1 ? "" : "s"} ahead, ${c.behind} behind`;
+  const lines = [
+    f.release ? `<li>Against upstream's latest release, ${link(gh(f.upstream, `/releases/tag/${encodeURIComponent(f.release.tag)}`), f.release.tag)}${f.release.at ? ` <span class="s">(${time(f.release.at, now)} ago)</span>` : ""}: ${count(f.release)}.</li>` : "",
+    f.head ? `<li>Against upstream's ${esc(f.head.branch)}: ${link(gh(f.upstream, `/compare/${encodeURIComponent(f.head.branch)}...${f.repo.split("/")[0]}:${f.repo.split("/")[1]}:${encodeURIComponent(f.branch)}`), count(f.head))}.</li>` : "",
+    running ? `<li>The server reports version ${esc(running)}.</li>` : "",
+  ].filter(Boolean).join("\n");
+  return `<h2>Source</h2>
+<p>Runs ${link(gh(f.repo, `/tree/${encodeURIComponent(f.branch)}`), `${f.repo} ${f.branch}`)}, a fork of ${link(gh(f.upstream), f.upstream)}.</p>
+${lines ? `<ul>${lines}</ul>` : ""}
+<p class="s">Checked against GitHub ${time(f.checked_at, now)} ago, hourly.${f.ok ? "" : ` That check didn't answer${lines ? "; these are from the last one that did" : ""}.`}</p>`;
+}
+
 /** Where this server serves a service's own page: for one with no public page of its own, a third party's say. */
 export const servicePath = (name: string) => `/services/${encodeURIComponent(name)}`;
 
@@ -145,6 +162,7 @@ export function servicePage(s: Snapshot, name: string, toolsUsed: string[] = [],
   return `${pageHead(`${name} · ${s.suite} suite`)}<p class="s"><a href="/">${esc(s.suite)} suite</a></p>
 <h1>${esc(name)} ${pill(v.up ? "up" : "down", v.up ? "up" : "down")} <span class="s">for ${time(v.since, now)}</span></h1>
 <p class="s">${about ? `${about}. ` : ""}Polled ${time(s.polled_at, now)} ago. Reloads every minute.</p>
+${v.fork ? forkSection(v.fork, version, now) : ""}
 <h2>Tools <span class="s">${listed.length}${v.tools && !v.tools.ok ? ", from the last listing that answered" : ""}</span></h2>
 ${rows.length ? `<div class="wrap"><table><thead><tr><th>Tool</th><th></th></tr></thead><tbody>${rows.join("\n")}</tbody></table></div>` : `<p class="s">None listed.</p>`}
 <h2>Findings</h2>

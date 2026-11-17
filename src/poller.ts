@@ -4,6 +4,7 @@ import {
   type ChecksState, type FetchJson, type ListTools, type SubscribersState, type ToolsState,
   fetchJson, listTools, probeChecks, probeHealth, probeSubscribers, probeTools,
 } from "./probes.js";
+import { type ForkState, type GitHubGet, githubGet, githubRepo, probeFork } from "./github.js";
 import type { SkillSet, SkillsVersion } from "./skills.js";
 import type { Store } from "./store.js";
 
@@ -24,14 +25,19 @@ export interface Snapshot {
 /** Tools change at a deploy, not between polls. A service with no /health is listed every poll: it's the only sign of life. */
 const LISTING_SECONDS = 600;
 
-export interface PollerDeps { fetchJson?: FetchJson; listTools?: ListTools; clock?: () => Date; skills?: SkillSet }
+/** A fork moves when someone pushes to it or upstream releases: once an hour is plenty, and well inside GitHub's anonymous limit. */
+const FORK_SECONDS = 3600;
+
+export interface PollerDeps { fetchJson?: FetchJson; listTools?: ListTools; github?: GitHubGet; clock?: () => Date; skills?: SkillSet }
 
 export class Poller {
   snapshot: Snapshot | undefined;
   private running: Promise<Snapshot> | undefined;
   private readonly tools = new Map<string, ToolsState>();
+  private readonly forks = new Map<string, ForkState>();
   private readonly get: FetchJson;
   private readonly list: ListTools;
+  private readonly github: GitHubGet;
   private readonly clock: () => Date;
   /** The skills this release carries, if any. They don't change while it runs. */
   readonly skills: SkillSet | undefined;
@@ -39,6 +45,7 @@ export class Poller {
   constructor(readonly config: SuiteConfig, private readonly store: Store, deps: PollerDeps = {}) {
     this.get = deps.fetchJson ?? fetchJson;
     this.list = deps.listTools ?? listTools;
+    this.github = deps.github ?? githubGet;
     this.clock = deps.clock ?? (() => new Date());
     this.skills = deps.skills;
   }
@@ -67,23 +74,27 @@ export class Poller {
       Promise.all(config.services.map(async (service) => {
         const last = this.tools.get(service.name);
         const fresh = last?.ok && last.ok_at && Date.parse(at) - Date.parse(last.ok_at) < LISTING_SECONDS * 1000;
-        const [health, tools] = await Promise.all([
+        const lastFork = this.forks.get(service.name);
+        const forkFresh = lastFork && Date.parse(at) - Date.parse(lastFork.checked_at) < FORK_SECONDS * 1000;
+        const [health, tools, fork] = await Promise.all([
           service.health ? probeHealth(service.health, this.get, at) : undefined,
           !service.mcp ? undefined : service.health && fresh ? last : probeTools(service.mcp, this.list, at, last),
+          !service.fork ? undefined : forkFresh ? lastFork : probeFork(githubRepo(service.upstream)!, service.fork, this.github, at, lastFork),
         ]);
         if (tools) this.tools.set(service.name, tools);
-        return { service, health, tools };
+        if (fork) this.forks.set(service.name, fork);
+        return { service, health, tools, fork };
       })),
       config.subscribers ? probeSubscribers(config.subscribers.url, this.get, at) : undefined,
       config.checks ? probeChecks(config.checks.url, this.get, at) : undefined,
     ]);
-    const services = probed.map(({ service, health, tools }): ServiceState => {
+    const services = probed.map(({ service, health, tools, fork }): ServiceState => {
       const up = health ? health.ok : tools?.ok === true;
       const admin = health?.admin ?? service.admin;
       return {
         name: service.name, third_party: service.third_party, up, since: this.store.since(service.name, up, at),
         ...(service.repo ? { repo: service.repo } : {}), ...(admin ? { admin } : {}),
-        ...(service.public ? { public: service.public } : {}), ...(service.upstream ? { upstream: service.upstream } : {}), ...(health ? { health } : {}), ...(tools ? { tools } : {}),
+        ...(service.public ? { public: service.public } : {}), ...(service.upstream ? { upstream: service.upstream } : {}), ...(fork ? { fork } : {}), ...(health ? { health } : {}), ...(tools ? { tools } : {}),
       };
     });
     const findings = findFindings(config, services, subscribers, checks, this.store, at, this.skills);
