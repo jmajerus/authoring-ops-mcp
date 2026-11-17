@@ -23,6 +23,7 @@ if [ ! -f /etc/authoring-ops-mcp/env ]; then
   install -m 0640 -g ops /dev/null /etc/authoring-ops-mcp/env
   cat > /etc/authoring-ops-mcp/env <<'ENV'
 OPS_SUITE=/opt/authoring-ops-mcp/current/suites/authoring.json
+OPS_SKILLS=/opt/authoring-ops-mcp/current/skills
 OPS_STATE=/var/lib/authoring-ops-mcp/state.json
 OPS_HOST=0.0.0.0
 OPS_PORT=8000

@@ -1,5 +1,6 @@
 import type { ServiceConfig, SuiteConfig } from "./config.js";
 import type { ChecksState, HealthState, SubscribersState, ToolsState } from "./probes.js";
+import type { SkillSet } from "./skills.js";
 import type { Store } from "./store.js";
 
 /**
@@ -24,7 +25,8 @@ export interface Finding {
   /** Who owns the fix: a repository, or what the source said. */
   fix: string;
   summary: string;
-  examples?: string[];
+  /** Where the detail is, when another service keeps it. */
+  link?: string;
   first_seen: string;
 }
 
@@ -34,15 +36,16 @@ interface Candidate extends Omit<Finding, "first_seen"> {
   after_minutes?: number;
 }
 
-export const OWN_TOOLS = 2;
+/** This server's own tools: status and findings, and list_skills and get_skill when it carries skills. */
+export const ownTools = (skills?: SkillSet) => (skills ? 4 : 2);
 
-export function toolsTotal(services: ServiceState[]): number {
-  return services.reduce((n, s) => n + (s.tools?.names.length ?? 0), OWN_TOOLS);
+export function toolsTotal(services: ServiceState[], skills?: SkillSet): number {
+  return services.reduce((n, s) => n + (s.tools?.names.length ?? 0), ownTools(skills));
 }
 
 export function findFindings(
   config: SuiteConfig, services: ServiceState[], subscribers: SubscribersState | undefined, checks: ChecksState | undefined,
-  store: Store, at: string,
+  store: Store, at: string, skills?: SkillSet,
 ): Finding[] {
   const found: Candidate[] = [];
   const owner = (name: string) => config.services.find((s: ServiceConfig) => s.name === name)?.repo ?? name;
@@ -91,12 +94,15 @@ export function findFindings(
       if (c.result !== "fail" && c.result !== "drift") continue;
       found.push({
         id: `cross-service:${c.name}`, severity: c.result, fix: c.fix || config.checks.owner, first_seen: c.first_seen,
-        summary: `${c.name}: ${c.count} found.`, ...(c.examples.length ? { examples: c.examples } : {}),
+        // One line a check: the examples, and dismissing one, stay with the service that keeps them.
+        summary: `${c.name}: ${c.count} found.`, ...(config.checks.worklist ? { link: config.checks.worklist } : {}),
       });
     }
   }
 
-  const total = toolsTotal(services);
+  if (skills) found.push(...skillFindings(config, services, skills));
+
+  const total = toolsTotal(services, skills);
   if (config.tool_budget !== undefined && total > config.tool_budget) {
     found.push({ id: "tool-budget", severity: "drift", fix: "the portal's tool toggles", summary: `The suite lists ${total} tools, over the budget of ${config.tool_budget}.` });
   }
@@ -111,4 +117,41 @@ export function findFindings(
   store.keep(services.map((s) => s.name), found.map((c) => c.id));
   return findings.filter((f) => f.due).map((f) => f.finding)
     .sort((a, b) => (a.severity === b.severity ? a.first_seen.localeCompare(b.first_seen) : a.severity === "fail" ? -1 : 1));
+}
+
+/**
+ * Do the services still list the tools the skills call? A renamed or dropped tool otherwise shows only when a
+ * skill trips over it mid-run. A service whose listing failed is left out: it has its own finding, and an old
+ * listing proves nothing.
+ */
+function skillFindings(config: SuiteConfig, services: ServiceState[], skills: SkillSet): Candidate[] {
+  const repo = skills.version.repo ?? "the skills repository";
+  if (!skills.toolsUsed) {
+    return [{ id: "skills:no-tool-list", severity: "drift", fix: repo, summary: `The skills at ${skills.version.ref} have no tools-used.json, so nothing checks that the tools they call still exist.` }];
+  }
+  const found: Candidate[] = [];
+  for (const [name, tools] of Object.entries(skills.toolsUsed)) {
+    const service = services.find((s) => s.name === name);
+    if (!service) {
+      found.push({ id: `skills:service:${name}`, severity: "fail", fix: repo, summary: `The skills call tools on ${name}, which isn't a service in the ${config.suite} suite.` });
+      continue;
+    }
+    if (!service.tools?.ok) continue;
+    for (const tool of tools.filter((t) => !service.tools!.names.includes(t))) {
+      found.push({
+        id: `skills:missing:${name}:${tool}`, severity: "fail", fix: `${service.repo ?? name}; or ${repo}, if the rename was meant`,
+        summary: `${name} no longer lists ${tool}, which the skills call.`,
+      });
+    }
+  }
+  // The other direction: a tool a skill names that tools-used.json leaves out is a tool nothing watches. A name
+  // two services share is taken as covered when either lists it.
+  const covered = new Set(Object.values(skills.toolsUsed).flat());
+  for (const service of services) {
+    if (!service.tools?.ok) continue;
+    for (const tool of skills.mentioned.filter((t) => service.tools!.names.includes(t) && !covered.has(t))) {
+      found.push({ id: `skills:unwatched:${service.name}:${tool}`, severity: "drift", fix: repo, summary: `The skills name ${service.name}'s ${tool}, but tools-used.json doesn't list it, so a rename would go unseen.` });
+    }
+  }
+  return found;
 }

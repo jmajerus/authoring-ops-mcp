@@ -32,6 +32,7 @@ export function healthStatus(poller: Poller, stateDir = "data") {
   const s = poller.snapshot;
   return {
     ok: true, service: `${poller.config.suite}-ops-mcp`, version: VERSION, deployed,
+    skills: poller.skills ? { ref: poller.skills.version.ref, commit: poller.skills.version.commit ?? null, count: poller.skills.skills.length } : null,
     polled_at: s?.polled_at ?? null,
     ...(s ? { services: { up: s.services.filter((v) => v.up).length, down: s.services.filter((v) => !v.up).map((v) => v.name) },
       findings: { fail: s.findings.filter((f) => f.severity === "fail").length, drift: s.findings.filter((f) => f.severity === "drift").length } } : {}),

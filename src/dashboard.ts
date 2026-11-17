@@ -1,6 +1,7 @@
 import type { Finding } from "./findings.js";
 import { VERSION } from "./mcp.js";
 import type { Snapshot } from "./poller.js";
+import { versionLabel } from "./skills.js";
 
 /** The one page. Pills say what state something is in; links go somewhere; nothing here changes anything. */
 
@@ -73,10 +74,18 @@ function findingsTable(findings: Finding[], now: number): string {
   for (const f of findings) groups.set(f.fix, [...(groups.get(f.fix) ?? []), f]);
   const rows = [...groups].map(([fix, list]) => list.map((f, i) => `<tr>${i === 0 ? `<td rowspan="${list.length}" class="w">${esc(fix)}</td>` : ""}
 <td>${pill(f.severity === "fail" ? "down" : "stale", f.severity)}</td>
-<td class="w">${esc(f.summary)}${f.examples?.length ? `<ul class="s">${f.examples.map((e) => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}</td>
+<td class="w">${esc(f.summary)}${f.link ? ` ${link(f.link, "details")}` : ""}</td>
 <td>${time(f.first_seen, now)}</td></tr>`).join("\n")).join("\n");
   return `<h2>Findings <span class="s">by who owns the fix</span></h2>
 <div class="wrap"><table><thead><tr><th>Fix in</th><th>Severity</th><th>What</th><th>Open for</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function skillsSection(s: Snapshot): string {
+  if (!s.skills) return `<h2>Skills</h2><p class="s">This release carries none.</p>`;
+  const drift = s.findings.filter((f) => f.id.startsWith("skills:"));
+  const state = drift.some((f) => f.severity === "fail") ? pill("down", "a tool is gone") : drift.length ? pill("stale", "tool list out of step") : pill("up", `${s.skills.tools_checked} tools still listed`);
+  return `<h2>Skills <span class="s">${esc(versionLabel(s.skills.version))}</span></h2>
+<p>${state} <span class="s">${esc(s.skills.names.join(", "))}</span></p>`;
 }
 
 export function dashboardPage(s: Snapshot | undefined, suite: string, now = Date.now()): string {
@@ -91,9 +100,10 @@ export function dashboardPage(s: Snapshot | undefined, suite: string, now = Date
 <p class="s">Polled ${time(s.polled_at, now)} ago. ${s.portal ? `Portal: ${link(s.portal, s.portal)}. ` : ""}Reloads every minute. This page reads and reports; it changes nothing.</p>
 <h2>Services</h2>
 ${servicesTable(s, now)}
-<p class="s">${s.tools_total} tools across the suite${budget}, counting this server's two. The portal's own toggles aren't visible from here.</p>
+<p class="s">${s.tools_total} tools across the suite${budget}, counting this server's ${s.skills ? "four" : "two"}. The portal's own toggles aren't visible from here.</p>
 ${findingsTable(s.findings, now)}
 ${subscribersTable(s, now)}
+${skillsSection(s)}
 <p class="s" style="margin-top:32px">${esc(s.suite)}-ops-mcp ${VERSION} · <a href="/api/status">/api/status</a> · <a href="/health">/health</a></p>
 </body></html>`;
 }
