@@ -105,9 +105,21 @@ function findingsTable(findings: Finding[], now: number, admin: boolean): string
 function skillsSection(s: Snapshot): string {
   if (!s.skills) return `<h2>Skills</h2><p class="s">This release carries none.</p>`;
   const drift = s.findings.filter((f) => f.id.startsWith("skills:"));
-  const state = drift.some((f) => f.severity === "fail") ? pill("down", "a tool is gone") : drift.length ? pill("stale", "tool list out of step") : pill("up", `${s.skills.tools_checked} tools still listed`);
-  return `<h2>Skills <span class="s">${esc(versionLabel(s.skills.version))}</span></h2>
-<p>${state} <span class="s">${esc(s.skills.names.join(", "))}</span></p>`;
+  const state = drift.some((f) => f.severity === "fail") ? pill("down", "a tool is gone") : drift.length ? pill("stale", "tool list out of step") : pill("up", "every tool they call is listed");
+  const { version, list } = s.skills;
+  // The skills repository is public: each name links to the skill as this release carries it.
+  const at = version.repo ? `https://github.com/${version.repo}/tree/${encodeURIComponent(version.commit ?? version.ref)}` : undefined;
+  const service = (name: string) => {
+    const v = s.services.find((x) => x.name === name);
+    const href = v?.public ?? (v ? servicePath(name) : undefined);
+    return href ? `<a href="${esc(href)}">${esc(name.replace(/-mcp$/, ""))}</a>` : esc(name.replace(/-mcp$/, ""));
+  };
+  const rows = list.map((k) => `<tr><td>${at ? link(`${at}/${encodeURIComponent(k.name)}`, k.name) : esc(k.name)}</td><td class="w">${esc(k.summary)}</td>
+<td class="w">${k.services.map(service).join(", ")}</td><td>${k.missing.length ? pill("down", `${k.missing.length} gone`) : pill("up", "ok")}</td></tr>`).join("\n");
+  const services = new Set(list.flatMap((k) => k.services)).size;
+  return `<h2>Skills <span class="s">${esc(versionLabel(version))}</span></h2>
+<p>${state} <span class="s">${list.length} skill${list.length === 1 ? "" : "s"}, calling ${s.skills.tools_checked} tools across ${services} service${services === 1 ? "" : "s"}. Installed in a client, or read from this server's <code>list_skills</code> and <code>get_skill</code>.</span></p>
+<div class="wrap"><table><thead><tr><th>Skill</th><th>What it does</th><th>Calls</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 /** The admin page's own section: where the fixes are made, and polling now. */

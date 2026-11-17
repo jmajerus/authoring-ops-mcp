@@ -8,7 +8,13 @@ import path from "node:path";
  */
 
 export interface SkillsVersion { repo?: string; ref: string; commit?: string; dirty?: boolean; at?: string }
-export interface Skill { name: string; description: string; files: string[] }
+export interface Skill {
+  name: string; description: string; files: string[];
+  /** What its Markdown puts in backticks, in all its files (shared references too): the tools it may call, among field names. */
+  mentioned: string[];
+  /** What SKILL.md itself puts in backticks, without the references every skill carries. */
+  own: string[];
+}
 export interface SkillSet {
   dir: string;
   version: SkillsVersion;
@@ -38,11 +44,20 @@ export function loadSkills(dir: string): SkillSet | undefined {
   const mentioned = new Set<string>();
   const skills = fs.readdirSync(dir).filter((d) => fs.existsSync(path.join(dir, d, "SKILL.md"))).sort().map((name): Skill => {
     const files = filesUnder(path.join(dir, name));
+    const all = new Set<string>();
+    const own = new Set<string>();
     for (const file of files.filter((f) => f.endsWith(".md"))) {
-      for (const m of fs.readFileSync(path.join(dir, name, file), "utf8").matchAll(/`([a-z][a-z0-9]*(?:_[a-z0-9]+)*)`/g)) mentioned.add(m[1]);
+      for (const m of fs.readFileSync(path.join(dir, name, file), "utf8").matchAll(/`([a-z][a-z0-9]*(?:_[a-z0-9]+)*)`/g)) {
+        mentioned.add(m[1]);
+        all.add(m[1]);
+        if (file === "SKILL.md") own.add(m[1]);
+      }
     }
     const front = fs.readFileSync(path.join(dir, name, "SKILL.md"), "utf8").match(/^---\n([\s\S]*?)\n---\n/)?.[1] ?? "";
-    return { name, description: front.match(/^description: (.*)$/m)?.[1]?.trim() ?? "", files: ["SKILL.md", ...files.filter((f) => f !== "SKILL.md")] };
+    return {
+      name, description: front.match(/^description: (.*)$/m)?.[1]?.trim() ?? "", files: ["SKILL.md", ...files.filter((f) => f !== "SKILL.md")],
+      mentioned: [...all].sort(), own: [...own].sort(),
+    };
   });
   let toolsUsed: Record<string, string[]> | undefined;
   try {
@@ -61,6 +76,20 @@ export function readSkillFile(set: SkillSet, name: string, file = "SKILL.md"): s
   if (body.includes(0)) throw new SkillError(`${name}/${file} isn't text.`);
   if (body.length > MAX_BYTES) throw new SkillError(`${name}/${file} is ${body.length} bytes, too large to send whole.`);
   return body.toString("utf8");
+}
+
+/**
+ * A description's first sentence, without the "through the … servers (…)" every skill says: what the skill does,
+ * for a line on a page.
+ */
+export function skillSummary(description: string): string {
+  const first = description.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? description;
+  return first.replace(/,? through the (?:[\w ]+ )?MCP (?:servers|tools)(?: \([^)]*\))?/, "").replace(/\s+,/g, ",").trim();
+}
+
+/** The servers a description says the skill works through ("… MCP servers (holdings, corpus, quote)"), or none. */
+export function describedServers(description: string): string[] {
+  return description.match(/MCP servers \(([^)]*)\)/)?.[1].split(",").map((s) => s.trim()).filter(Boolean) ?? [];
 }
 
 export function versionLabel(v: SkillsVersion): string {

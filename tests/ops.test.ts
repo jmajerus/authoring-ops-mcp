@@ -13,7 +13,7 @@ import { Poller } from "../src/poller.js";
 import { type Installed, readInstalled } from "../src/github.js";
 import { readHealth } from "../src/probes.js";
 import { serveHttp } from "../src/server.js";
-import { type SkillSet, loadSkills, readSkillFile } from "../src/skills.js";
+import { type SkillSet, describedServers, loadSkills, readSkillFile, skillSummary } from "../src/skills.js";
 import { Store } from "../src/store.js";
 
 const config = parseConfig({
@@ -226,11 +226,37 @@ describe("skills", () => {
   it("loads what a release carries, and nothing when it carries none", () => {
     expect(loadSkills(path.join(os.tmpdir(), "no-such-skills"))).toBeUndefined();
     const set = loadSkills(skillsDir())!;
-    expect(set.skills).toEqual([{ name: "survey", description: "Survey a topic. Use when asked what the library has.", files: ["SKILL.md", "library.md"] }]);
+    expect(set.skills).toEqual([{
+      name: "survey", description: "Survey a topic. Use when asked what the library has.", files: ["SKILL.md", "library.md"],
+      mentioned: ["check", "one", "page_label", "two_more"], own: ["check", "one", "page_label", "two_more"],
+    }]);
     expect(set.mentioned).toEqual(["check", "one", "page_label", "two_more"]);
     expect(readSkillFile(set, "survey", "library.md")).toBe("# The library\n");
     expect(() => readSkillFile(set, "survey", "../version.json")).toThrow(/no file/);
     expect(() => readSkillFile(set, "nope")).toThrow(/The skills are: survey/);
+  });
+
+  it("says what each skill does and which services it works through", async () => {
+    expect(skillSummary("Trace one idea through the owner's library and hand back a dossier, through the Authoring Portal MCP servers (quote, corpus). Starts from it."))
+      .toBe("Trace one idea through the owner's library and hand back a dossier.");
+    expect(skillSummary("Write an article that quotes books through the Corpus and Quote MCP tools, for any writer. Use when.")).toBe("Write an article that quotes books, for any writer.");
+    expect(describedServers("Find gaps, through the Authoring Portal MCP servers (a, b-mcp, nowhere). Reports.")).toEqual(["a", "b-mcp", "nowhere"]);
+
+    // a-mcp lists one and two, not check, which survey calls.
+    const dir = skillsDir({ "a-mcp": ["one", "check"], "b-mcp": ["three"] });
+    fs.mkdirSync(path.join(dir, "named"));
+    fs.writeFileSync(path.join(dir, "named/SKILL.md"), "---\nname: named\ndescription: Name things, through the Authoring Portal MCP servers (b, nowhere). Use when.\n---\n\nCall `one`.\n");
+    // The reference every skill carries names b-mcp's tool; it doesn't make survey a b-mcp skill.
+    fs.writeFileSync(path.join(dir, "survey/library.md"), "Others: `three`.\n");
+    const { poller } = world(loadSkills(dir));
+    const s = await poller.poll();
+    expect(s.skills!.list).toEqual([
+      { name: "named", summary: "Name things.", services: ["b-mcp"], missing: [] },
+      { name: "survey", summary: "Survey a topic.", services: ["a-mcp"], missing: ["a-mcp check"] },
+    ]);
+    const html = dashboardPage(s, "test", { now: Date.parse("2026-11-16T12:00:00Z") });
+    for (const shown of ["2 skills, calling 3 tools across 2 services", `<a href="https://github.com/me/skills/tree/0123456789abcdef/survey">survey</a>`,
+      `<td class="w"><a href="https://a.example/">a</a></td>`, `<td class="w"><a href="/services/b-mcp">b</a></td>`, "1 gone", "a tool is gone"]) expect(html).toContain(shown);
   });
 
   it("finds nothing while the services list what the skills call", async () => {

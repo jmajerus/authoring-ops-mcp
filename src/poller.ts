@@ -5,7 +5,7 @@ import {
   fetchJson, listTools, probeChecks, probeHealth, probeStats, probeSubscribers, probeTools,
 } from "./probes.js";
 import { type ForkState, type GitHubGet, type Installed, githubGet, githubRepo, probeFork } from "./github.js";
-import type { SkillSet, SkillsVersion } from "./skills.js";
+import { type SkillSet, type SkillsVersion, describedServers, skillSummary } from "./skills.js";
 import type { Store } from "./store.js";
 
 /** One poll's view of the suite. Everything the dashboard and the tools show comes from the last one. */
@@ -18,8 +18,32 @@ export interface Snapshot {
   checks?: ChecksState;
   tools_total: number;
   tool_budget?: number;
-  skills?: { version: SkillsVersion; names: string[]; tools_checked: number };
+  skills?: { version: SkillsVersion; names: string[]; tools_checked: number; list: SkillRow[] };
   findings: Finding[];
+}
+
+/** One skill, for the pages: what it does, the services whose tools it calls, and any of those tools now gone. */
+export interface SkillRow { name: string; summary: string; services: string[]; missing: string[] }
+
+/**
+ * Which services each skill works through: those its description names ("… MCP servers (holdings, corpus)"),
+ * else those whose tools (by tools-used.json) its own SKILL.md names; the references every skill carries name
+ * them all. A tool is missing when any file of the skill names it and a listing that answered lacks it, as the
+ * findings count it.
+ */
+export function skillRows(skills: SkillSet, services: ServiceState[]): SkillRow[] {
+  const used = Object.entries(skills.toolsUsed ?? {});
+  const known = new Set([...used.map(([s]) => s), ...services.map((s) => s.name)]);
+  const resolve = (n: string) => [n, `${n}-mcp`].find((x) => known.has(x));
+  return skills.skills.map((skill) => {
+    const described = describedServers(skill.description).map(resolve).filter((s): s is string => !!s);
+    const called = used.filter(([, tools]) => tools.some((t) => skill.own.includes(t))).map(([s]) => s);
+    const missing = used.flatMap(([service, tools]) => {
+      const listing = services.find((s) => s.name === service)?.tools;
+      return listing?.ok ? tools.filter((t) => skill.mentioned.includes(t) && !listing.names.includes(t)).map((t) => `${service} ${t}`) : [];
+    });
+    return { name: skill.name, summary: skillSummary(skill.description), services: described.length ? described : called, missing };
+  });
 }
 
 /** Tools change at a deploy, not between polls. A service with no /health is listed every poll: it's the only sign of life. */
@@ -118,6 +142,7 @@ export class Poller {
       ...(this.skills ? { skills: {
         version: this.skills.version, names: this.skills.skills.map((s) => s.name),
         tools_checked: Object.values(this.skills.toolsUsed ?? {}).flat().length,
+        list: skillRows(this.skills, services),
       } } : {}),
       findings,
     };

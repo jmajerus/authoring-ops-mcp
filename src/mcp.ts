@@ -90,7 +90,7 @@ export function createServer(poller: Poller): McpServer {
       description: `The skills written for the ${suite} suite: each one's name, what it's for and when to use it, and its files. For a session with no skills installed; an installed copy is the one to use. Fetch one with get_skill.`,
       inputSchema: {},
       annotations: readOnly,
-    }, () => json({ source: versionLabel(skills.version), skills: skills.skills }));
+    }, () => json({ source: versionLabel(skills.version), skills: skills.skills.map(({ name, description, files }) => ({ name, description, files })) }));
 
     server.registerTool("get_skill", {
       title: "Get a skill",
