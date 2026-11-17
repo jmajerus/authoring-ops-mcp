@@ -24,7 +24,10 @@ export interface Finding {
   severity: "fail" | "drift";
   /** Who owns the fix: a repository, or what the source said. */
   fix: string;
+  /** A sentence safe to show anyone: no addresses, no error text. */
   summary: string;
+  /** What the failing source said (an error, a reason), for the LAN and the tools; the public page leaves it out. */
+  detail?: string;
   /** Where the detail is, when another service keeps it. */
   link?: string;
   first_seen: string;
@@ -53,12 +56,12 @@ export function findFindings(
   for (const s of services) {
     const fix = s.repo ?? s.name;
     if (!s.up) {
-      const why = s.health ? `isn't answering /health (${s.health.error ?? "no answer"})` : `isn't listing its tools (${s.tools?.error ?? "no answer"})`;
-      found.push({ id: `down:${s.name}`, severity: "fail", fix, summary: `${s.name} ${why}.`, first_seen: s.since });
+      const summary = s.health ? `${s.name} isn't answering /health.` : `${s.name} isn't listing its tools.`;
+      found.push({ id: `down:${s.name}`, severity: "fail", fix, summary, detail: (s.health ? s.health.error : s.tools?.error) ?? "no answer", first_seen: s.since });
       continue;
     }
     if (s.health && s.tools && !s.tools.ok) {
-      found.push({ id: `mcp:${s.name}`, severity: "fail", fix, summary: `${s.name} answers /health but not an MCP tool listing (${s.tools.error ?? "no answer"}).` });
+      found.push({ id: `mcp:${s.name}`, severity: "fail", fix, summary: `${s.name} answers /health but not an MCP tool listing.`, detail: s.tools.error ?? "no answer" });
     }
     const d = s.health?.deployed;
     if (d?.branch && d.branch !== "main") found.push({ id: `branch:${s.name}`, severity: "drift", fix, summary: `${s.name} is deployed from ${d.branch}, not main.`, first_seen: d.at });
@@ -70,10 +73,10 @@ export function findFindings(
 
   if (config.subscribers && subscribers) {
     if (!subscribers.ok) {
-      found.push({ id: "source:subscribers", severity: "fail", fix: config.subscribers.owner, summary: `The subscriber registry can't be read (${subscribers.error}).`, after_minutes: 5 });
+      found.push({ id: "source:subscribers", severity: "fail", fix: config.subscribers.owner, summary: "The subscriber registry can't be read.", detail: subscribers.error, after_minutes: 5 });
     }
     for (const sub of subscribers.items) {
-      if (sub.blocked) found.push({ id: `subscriber-blocked:${sub.id}`, severity: "fail", fix: owner(sub.id), summary: `${sub.label} is blocked on the terminology: ${sub.blocked}.` });
+      if (sub.blocked) found.push({ id: `subscriber-blocked:${sub.id}`, severity: "fail", fix: owner(sub.id), summary: `${sub.label} is blocked on the terminology.`, detail: sub.blocked });
       else if (sub.pending > 0) {
         const breaking = sub.pending_breaking ? `, ${sub.pending_breaking} breaking` : "";
         found.push({
@@ -89,7 +92,7 @@ export function findFindings(
   }
 
   if (config.checks && checks) {
-    if (!checks.ok) found.push({ id: "source:checks", severity: "fail", fix: config.checks.owner, summary: `The cross-service checks can't be read (${checks.error}).`, after_minutes: 5 });
+    if (!checks.ok) found.push({ id: "source:checks", severity: "fail", fix: config.checks.owner, summary: "The cross-service checks can't be read.", detail: checks.error, after_minutes: 5 });
     for (const c of checks.items) {
       if (c.result !== "fail" && c.result !== "drift") continue;
       found.push({

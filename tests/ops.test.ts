@@ -295,7 +295,8 @@ describe("the server", () => {
       expect(page).not.toContain("<b>1</b>");
       expect(await (await fetch(`${base}/health`)).json()).toMatchObject({ ok: true, service: "test-ops-mcp", deployed: null, skills: { ref: "v1.0.0", count: 1 }, findings: { fail: 0, drift: 1 } });
       expect((await fetch(`${base}/api/poll`)).status).toBe(405);
-      expect((await fetch(`${base}/`, { headers: { "cf-ray": "x" } })).status).toBe(401);
+      for (const p of ["/admin", "/health", "/api/status"]) expect((await fetch(`${base}${p}`, { headers: { "cf-ray": "x" } })).status).toBe(401);
+      expect((await fetch(`${base}/mcp`, { method: "POST", headers: { "cf-ray": "x" } })).status).toBe(401);
 
       const client = new Client({ name: "test", version: "1" });
       await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`)));
@@ -311,6 +312,56 @@ describe("the server", () => {
       expect(skill.content[0].text).toMatch(/^\[survey\/SKILL\.md, from me\/skills at v1\.0\.0[^\n]*library\.md[^\n]*\]\n\n---\nname: survey/);
       expect(await client.callTool({ name: "get_skill", arguments: { name: "survey", file: "../../etc/passwd" } })).toMatchObject({ isError: true });
       await client.close();
+    } finally {
+      server.close();
+    }
+  });
+
+  it("keeps addresses, errors, and writable links off the public page, and puts them on /admin", async () => {
+    const { w, poller } = world();
+    w.tools["http://b/mcp"] = new Error("connect ECONNREFUSED 192.168.7.7:8000");
+    w.subscribers = { version: 7, subscribers: [{ id: "a-mcp", label: "A", schemes: ["s"], pending: 0, blocked: "scheme s gone at 10.0.0.9", lastSeen: "2026-11-16T11:59:00Z" }] };
+    w.checks = { checks: [{ name: "joins", result: "fail", count: 2, fix: "a-mcp" }] };
+    w.health = { ok: true, version: "1", admin: "http://a.localdomain/admin", deployed: { branch: "main", commit: "abcdef0", at: "2026-11-15T12:00:00Z" } };
+    await poller.poll();
+    const findings = poller.snapshot!.findings;
+    expect(findings.find((f) => f.id === "down:b-mcp")).toMatchObject({ summary: "b-mcp isn't listing its tools.", detail: expect.stringContaining("ECONNREFUSED") });
+    expect(findings.find((f) => f.id === "subscriber-blocked:a-mcp")).toMatchObject({ summary: "A is blocked on the terminology.", detail: "scheme s gone at 10.0.0.9" });
+
+    const server = await serveHttp(poller, { host: "127.0.0.1", port: 0, stateDir: "/nonexistent" });
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      const tunnel = await fetch(`${base}/`, { headers: { "cf-ray": "x" } });
+      expect(tunnel.status).toBe(200);
+      const open = await tunnel.text();
+      expect(open).toContain("b-mcp isn&#39;t listing its tools.");
+      expect(open).toContain("joins: 2 found.");
+      for (const hidden of ["ECONNREFUSED", "10.0.0.9", "localdomain", "http://h/worklist", "/admin", "/api/status", "Poll now"]) expect(open).not.toContain(hidden);
+      expect((await fetch(`${base}/`, { headers: { "cf-ray": "x", "cf-access-jwt-assertion": "forged" } })).status).toBe(503);
+      expect((await fetch(`${base}/`, { method: "POST", headers: { "cf-ray": "x" } })).status).toBe(405);
+
+      expect(await (await fetch(`${base}/`)).text()).toContain(`<a href="/admin">admin</a>`);
+      const admin = await (await fetch(`${base}/admin`)).text();
+      for (const shown of ["ECONNREFUSED", "10.0.0.9", "http://a.localdomain/admin", "http://h/worklist", "Poll now"]) expect(admin).toContain(shown);
+
+      const polled = poller.snapshot!.polled_at;
+      w.tick(1);
+      const post = (path: string, headers: Record<string, string>) => fetch(`${base}${path}`, { method: "POST", headers, redirect: "manual" });
+      // The form needs a browser's word that it came from this page; another site's, or none at all, is refused.
+      expect((await post("/admin/poll", { origin: "http://evil.example" })).status).toBe(403);
+      expect((await post("/admin/poll", { origin: "null" })).status).toBe(403);
+      expect((await post("/admin/poll", { "sec-fetch-site": "cross-site" })).status).toBe(403);
+      expect((await post("/admin/poll", {})).status).toBe(403);
+      // /api/poll is for curl, but not a way round that.
+      expect((await post("/api/poll", { origin: "http://evil.example" })).status).toBe(403);
+      expect((await post("/api/poll", { "sec-fetch-site": "same-site" })).status).toBe(403);
+      expect(poller.snapshot!.polled_at).toBe(polled);
+      expect((await post("/admin/poll", { "sec-fetch-site": "same-origin" })).status).toBe(303);
+      expect((await post("/api/poll", {})).status).toBe(200);
+      const posted = await fetch(`${base}/admin/poll`, { method: "POST", headers: { origin: base }, redirect: "manual" });
+      expect([posted.status, posted.headers.get("location")]).toEqual([303, "/admin"]);
+      expect(poller.snapshot!.polled_at).not.toBe(polled);
+      expect((await fetch(`${base}/admin/poll`, { method: "POST", headers: { "cf-ray": "x" } })).status).toBe(401);
     } finally {
       server.close();
     }

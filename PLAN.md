@@ -1,7 +1,8 @@
 # authoring-ops-mcp — plan
 
-**Status: steps 1–4 of "Order of work" are built and run against the live suite (2026-11-17). It isn't deployed:
-the container doesn't exist yet, and authoring-skills has no tag to pin. The portal (step 5) isn't started.**
+**Status: steps 1–5 of "Order of work" are done (2026-11-17). It is deployed to `authoring-ops-mcp.localdomain`
+with the skills at authoring-skills `v0.1.0`, behind its own Cloudflare Access application, and in the portal
+as `suite`.**
 
 ## What it is
 
@@ -154,8 +155,10 @@ The two skill tools are registered only when the release carries skills.
   for a summary object.
 - **zotero-mcp is listed every poll**, not every ten minutes: with no `/health`, its listing is the only sign
   of life, and a ten-minute cache would hide an outage for ten minutes.
-- **The dashboard and `/health` are LAN only; `/mcp` alone goes through Access.** holdings-mcp's public
-  root page has no counterpart here.
+- **A public page at `/` and an admin page at `/admin`**, as the sibling servers have. `/` is safe for anyone to
+  see (findings' `summary` only; `detail`, addresses, and links to writable pages stay off it) and is open through
+  the tunnel without a token, as holdings-mcp's root is. The shared Access application covers `/mcp` alone on
+  each host (2026-11-17; it had covered whole hosts), so outsiders reach `/`. `/admin`, `/health`, and `/api/*` are LAN only; `/mcp` goes through Access.
 - **Deploy has no `--main` yet.** It deploys the current checkout and records `dirty`, as holdings-mcp's does.
   corpus-mcp's `--main`, `--pr`, and `--current` can come once the repository has a remote.
 
@@ -192,18 +195,16 @@ The two skill tools are registered only when the release carries skills.
 ## Order of work
 
 1. **Skeleton.** Built: TypeScript, Node 22, `@modelcontextprotocol/sdk`, holdings-mcp's layout and deploy
-   tooling, the config loader, `/health` under its own contract. Left: the user creates the LXC
-   `authoring-ops-mcp.localdomain`; then `npm run deploy -- --provision`, `--env`, and a first deploy. The
-   deploy script is adapted from holdings-mcp's and hasn't been run.
+   tooling, the config loader, `/health` under its own contract. Deployed 2026-11-17 to
+   `authoring-ops-mcp.localdomain` (`--provision`, `--env`, then a deploy, which installs the systemd unit).
 2. **Service probes.** Built: `/health` for the five, `tools/list` for all six, the services table, `status`.
 3. **Subscribers and holdings findings.** Built, with `findings`.
 4. **Skills and guidance.** Built here: the vendoring step, `list_skills` and `get_skill`, the instructions,
-   and the drift findings. Built on branches, not committed: `tools-used.json` and its test in authoring-skills
-   (`tools-used`), and the removal of `TOOLS_SKILLS_USE` and `tools-skills-use` from holdings-mcp
-   (`move-tool-check-to-suite`). Left: merge the authoring-skills branch and tag it `v0.1.0`, which the deploy
-   needs. Deploy holdings-mcp's branch only after this server is live, or nothing checks the tools in between.
-5. **Portal.** Add authoring-ops-mcp to the Cloudflare portal with the prefix `suite` (with Access, as the others), and check
-   Claude Code's `authoring` MCP entry points at `authoring.majerus.us`.
+   and the drift findings. `tools-used.json` and its test are in authoring-skills, tagged `v0.1.0`; holdings-mcp
+   no longer runs `tools-skills-use` (its PR #7, merged and deployed after this server was live).
+5. **Portal.** Done: `authoring-ops-mcp.majerus.us` has its own Access application (self-hosted, with the
+   others' policy and OAuth setting), and the portal lists the server as `suite`. Its four tools answer
+   through the portal from Claude Code.
 6. **Health contract fixes**, server by server, as each is next touched: terminology-mcp's `version`,
    `dirty` in corpus-mcp and terminology-mcp, then the optional fields.
 
@@ -218,8 +219,8 @@ The two skill tools are registered only when the release carries skills.
   still shows here as one line. A count of undismissed findings in `/api/checks` would let it drop off.
 - **`list_sets`**: `concept-dossier` names it without saying whose. quote-mcp and terminology-mcp both have
   one; `tools-used.json` puts it under terminology-mcp, from the tools named around it. Worth a word in the skill.
-- **Instructions order**: if the portal cuts the joined instructions off, the front door's should come first.
-  Whether the portal's server order controls that hasn't been checked.
+- **Instructions order**: answered. The portal put the front door's instructions first when it was added
+  (2026-11-17); whether that holds as servers are added or renamed is worth a look then.
 - **Tool budget**: what number should the portal total be held under? Set `tool_budget` in the suite config
   to get a finding when it's passed. Ways to trim zotero-mcp without a fork: `ZOTERO_MCP_TOOLSETS` upstream,
   the portal's per-tool toggles, and Code Mode.

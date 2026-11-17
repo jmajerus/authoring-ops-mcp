@@ -3,7 +3,18 @@ import { VERSION } from "./mcp.js";
 import type { Snapshot } from "./poller.js";
 import { versionLabel } from "./skills.js";
 
-/** The one page. Pills say what state something is in; links go somewhere; nothing here changes anything. */
+/**
+ * Two views of the last poll. The public one (/) is safe for anyone to see: no addresses, no error text, no
+ * links to anything writable. The admin one (/admin, LAN only) adds what a person fixing things needs: what
+ * each failing source said, the services' admin pages, the worklist, and a button to poll now. Neither page
+ * changes anything itself; the admin page links to pages that do.
+ */
+export interface PageOptions {
+  admin?: boolean;
+  /** The public page, seen from the LAN: link to /admin. */
+  lan?: boolean;
+  now?: number;
+}
 
 const esc = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -36,7 +47,7 @@ code{font:.86rem ui-monospace,monospace}
 .pill.up .dot{background:var(--ok)}.pill.stale .dot{background:var(--warn)}
 ul{margin:4px 0 0;padding-left:1.2rem}`;
 
-function servicesTable(s: Snapshot, now: number): string {
+function servicesTable(s: Snapshot, now: number, admin: boolean): string {
   const rows = s.services.map((v) => {
     const d = v.health?.deployed;
     const notes = [
@@ -44,37 +55,37 @@ function servicesTable(s: Snapshot, now: number): string {
       d?.dirty ? pill("stale", "uncommitted changes") : "",
       v.up && v.tools && !v.tools.ok ? pill("down", "no tool listing") : "",
       v.third_party ? `<span class="s">third party</span>` : "",
-      !v.up ? `<span class="s">${esc(v.health?.error ?? v.tools?.error)}</span>` : "",
+      admin && !v.up ? `<span class="s">${esc(v.health?.error ?? v.tools?.error)}</span>` : "",
     ].filter(Boolean).join(" ");
     const repo = v.repo ? `https://github.com/${v.repo}` : undefined;
     const commit = d?.commit ? link(repo && `${repo}/commit/${d.commit}`, d.commit.slice(0, 7)) : "";
     return `<tr><td>${link(repo, v.name)}</td><td>${pill(v.up ? "up" : "down", v.up ? "up" : "down")} <span class="s">${time(v.since, now)}</span></td>
 <td>${esc(v.health?.version)}</td><td><code>${commit}</code></td><td>${time(d?.at, now)}</td>
-<td class="n">${v.tools ? v.tools.names.length : ""}</td><td class="w">${notes}</td><td>${v.admin ? link(v.admin, "admin") : ""}</td></tr>`;
+<td class="n">${v.tools ? v.tools.names.length : ""}</td><td class="w">${notes}</td>${admin ? `<td>${v.admin ? link(v.admin, "admin") : ""}</td>` : ""}</tr>`;
   }).join("\n");
-  return `<div class="wrap"><table><thead><tr><th>Service</th><th>State, for</th><th>Version</th><th>Commit</th><th>Deployed</th><th class="n">Tools</th><th></th><th></th></tr></thead>
+  return `<div class="wrap"><table><thead><tr><th>Service</th><th>State, for</th><th>Version</th><th>Commit</th><th>Deployed</th><th class="n">Tools</th><th></th>${admin ? "<th></th>" : ""}</tr></thead>
 <tbody>${rows}</tbody></table></div>`;
 }
 
-function subscribersTable(s: Snapshot, now: number): string {
+function subscribersTable(s: Snapshot, now: number, admin: boolean): string {
   const subs = s.subscribers;
   if (!subs) return "";
-  if (!subs.ok) return `<h2>Terminology subscribers</h2><p>${pill("down", "unreadable")} <span class="s">${esc(subs.error)}</span></p>`;
+  if (!subs.ok) return `<h2>Terminology subscribers</h2><p>${pill("down", "unreadable")}${admin ? ` <span class="s">${esc(subs.error)}</span>` : ""}</p>`;
   const rows = subs.items.map((u) => {
     const state = u.blocked ? pill("down", "blocked") : u.pending ? pill("stale", `${u.pending} behind`) : pill("up", "current");
-    return `<tr><td>${esc(u.label)}</td><td>${state}</td><td>${esc(u.schemes.join(", "))}</td><td>${time(u.last_seen, now)}</td><td class="w s">${esc(u.blocked ?? "")}</td></tr>`;
+    return `<tr><td>${esc(u.label)}</td><td>${state}</td><td>${esc(u.schemes.join(", "))}</td><td>${time(u.last_seen, now)}</td><td class="w s">${admin ? esc(u.blocked ?? "") : ""}</td></tr>`;
   }).join("\n");
   return `<h2>Terminology subscribers${subs.head !== undefined ? ` <span class="s">head ${esc(subs.head)}</span>` : ""}</h2>
 <div class="wrap"><table><thead><tr><th>Subscriber</th><th>State</th><th>Schemes</th><th>Last seen</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
-function findingsTable(findings: Finding[], now: number): string {
+function findingsTable(findings: Finding[], now: number, admin: boolean): string {
   if (!findings.length) return `<h2>Findings</h2><p>${pill("up", "none open")}</p>`;
   const groups = new Map<string, Finding[]>();
   for (const f of findings) groups.set(f.fix, [...(groups.get(f.fix) ?? []), f]);
   const rows = [...groups].map(([fix, list]) => list.map((f, i) => `<tr>${i === 0 ? `<td rowspan="${list.length}" class="w">${esc(fix)}</td>` : ""}
 <td>${pill(f.severity === "fail" ? "down" : "stale", f.severity)}</td>
-<td class="w">${esc(f.summary)}${f.link ? ` ${link(f.link, "details")}` : ""}</td>
+<td class="w">${esc(f.summary)}${admin && f.detail ? ` <span class="s">${esc(f.detail)}</span>` : ""}${admin && f.link ? ` ${link(f.link, "details")}` : ""}</td>
 <td>${time(f.first_seen, now)}</td></tr>`).join("\n")).join("\n");
   return `<h2>Findings <span class="s">by who owns the fix</span></h2>
 <div class="wrap"><table><thead><tr><th>Fix in</th><th>Severity</th><th>What</th><th>Open for</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -88,22 +99,36 @@ function skillsSection(s: Snapshot): string {
 <p>${state} <span class="s">${esc(s.skills.names.join(", "))}</span></p>`;
 }
 
-export function dashboardPage(s: Snapshot | undefined, suite: string, now = Date.now()): string {
+/** The admin page's own section: where the fixes are made, and polling now. */
+function adminSection(s: Snapshot, worklist: string | undefined): string {
+  const links = [
+    worklist ? `<li>${link(worklist, "Cross-service worklist")} <span class="s">holdings-mcp: dismiss or restore a finding</span></li>` : "",
+    ...s.services.filter((v) => v.admin).map((v) => `<li>${link(v.admin, `${v.name} admin`)}</li>`),
+    s.portal ? `<li>${link(s.portal, "The portal")}</li>` : "",
+  ].filter(Boolean).join("\n");
+  return `<h2>Admin</h2>
+<form method="post" action="/admin/poll"><button type="submit">Poll now</button> <span class="s">Reads the suite again; changes nothing.</span></form>
+${links ? `<ul>${links}</ul>` : ""}`;
+}
+
+export function dashboardPage(s: Snapshot | undefined, suite: string, options: PageOptions & { worklist?: string } = {}): string {
+  const { admin = false, lan = false, now = Date.now() } = options;
   const head = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="60"><title>${esc(suite)} ops</title><style>${STYLE}</style></head><body>`;
+<meta http-equiv="refresh" content="60"><title>${esc(suite)} ops${admin ? " admin" : ""}</title><style>${STYLE}</style></head><body>`;
   if (!s) return `${head}<h1>${esc(suite)} suite</h1><p class="s">The first poll is still running. This page reloads by itself.</p></body></html>`;
   const down = s.services.filter((v) => !v.up).length;
   const fails = s.findings.filter((f) => f.severity === "fail").length;
   const overall = down ? pill("down", `${down} down`) : fails ? pill("stale", "up, with failing checks") : pill("up", "all up");
   const budget = s.tool_budget !== undefined ? ` of a budget of ${s.tool_budget}` : "";
-  return `${head}<h1>${esc(s.suite)} suite ${overall}</h1>
+  return `${head}<h1>${esc(s.suite)} suite${admin ? " admin" : ""} ${overall}</h1>
 <p class="s">Polled ${time(s.polled_at, now)} ago. ${s.portal ? `Portal: ${link(s.portal, s.portal)}. ` : ""}Reloads every minute. This page reads and reports; it changes nothing.</p>
+${admin ? adminSection(s, options.worklist) : ""}
 <h2>Services</h2>
-${servicesTable(s, now)}
+${servicesTable(s, now, admin)}
 <p class="s">${s.tools_total} tools across the suite${budget}, counting this server's ${s.skills ? "four" : "two"}. The portal's own toggles aren't visible from here.</p>
-${findingsTable(s.findings, now)}
-${subscribersTable(s, now)}
+${findingsTable(s.findings, now, admin)}
+${subscribersTable(s, now, admin)}
 ${skillsSection(s)}
-<p class="s" style="margin-top:32px">${esc(s.suite)}-ops-mcp ${VERSION} · <a href="/api/status">/api/status</a> · <a href="/health">/health</a></p>
+<p class="s" style="margin-top:32px">${esc(s.suite)}-ops-mcp ${VERSION}${admin ? ` · <a href="/">public page</a> · <a href="/api/status">/api/status</a> · <a href="/health">/health</a>` : lan ? ` · <a href="/admin">admin</a>` : ""}</p>
 </body></html>`;
 }
