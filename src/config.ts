@@ -14,6 +14,8 @@ export interface ServiceConfig {
   /** The repository that owns a fix, as owner/name. */
   repo?: string;
   admin?: string;
+  /** The service's own public page, read only: where the public page links its name. */
+  public?: string;
   third_party: boolean;
 }
 
@@ -61,6 +63,7 @@ export function parseConfig(raw: unknown): SuiteConfig {
     const service: ServiceConfig = {
       name, third_party: s.third_party === true,
       health: httpUrl(s.health, `${name}.health`), mcp: httpUrl(s.mcp, `${name}.mcp`), admin: httpUrl(s.admin, `${name}.admin`),
+      public: httpUrl(s.public, `${name}.public`),
       repo: s.repo === undefined ? undefined : text(s.repo, `${name}.repo`),
     };
     if (!service.health && !service.mcp) throw new Error(`${name} needs a health or an mcp URL: there is nothing to probe.`);

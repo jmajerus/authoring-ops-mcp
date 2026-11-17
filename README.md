@@ -15,7 +15,7 @@ It reads and reports, and changes nothing. See [PLAN.md](PLAN.md) for what is bu
 
 | | |
 |---|---|
-| Pages | http://authoring-ops-mcp.localdomain:8000/ (public) and `/admin` (LAN) |
+| Pages | `https://authoring-ops.majerus.us/` (public); http://authoring-ops-mcp.localdomain:8000/admin (LAN) |
 | MCP | `https://authoring-ops-mcp.majerus.us/mcp`, behind Cloudflare Access, added to the portal with the prefix `suite` |
 
 ## Tools
@@ -48,8 +48,8 @@ every service, so one answer covers the suite. A source it can't read is a findi
 
 ## The suite
 
-[suites/authoring.json](suites/authoring.json) names every service, its `/health` and MCP URLs, and its
-repository; where the subscribers and checks are read; the routing lines in the instructions (`guidance`); the
+[suites/authoring.json](suites/authoring.json) names every service, its `/health` and MCP URLs, its
+repository, and its admin and public pages; where the subscribers and checks are read; the routing lines in the instructions (`guidance`); the
 tool budget; and the skills ref a release carries. The code names none of them. `OPS_SUITE` chooses the file.
 
 Keep the guidance short: the portal joins every server's instructions and cuts the whole off at a length.
@@ -78,10 +78,14 @@ every service lists, so a renamed or retired tool shows up as a finding before a
 
 Neither page changes anything; the admin page links to pages that do. Through the tunnel, `/` answers without a
 token, as holdings-mcp's library page does (a token, if sent, must still verify), `/mcp` needs a verified Access
-token, and everything else is a 404. The suite's Access application covers only `/mcp` on each host (with
-managed OAuth for the portal), so `/` reaches the server, which answers it with the public page and refuses
-everything else without a token. A path the application covers takes precedence over the host, and an empty
-path would cover the whole host, `/` included.
+token, and everything else is a 404. Like the other servers, this one has two hostnames:
+`authoring-ops.majerus.us`, which no Access application covers, for the public page; and
+`authoring-ops-mcp.majerus.us`, which the suite's MCP application covers whole (with managed OAuth for the
+portal). Keep that application on the whole host: scoped to `/mcp`, it stops answering the OAuth discovery
+addresses at the host's root (`/.well-known/oauth-protected-resource` and the rest), and MCP clients can't sign in.
+
+The public page links each service's name to its own public page (`public` in the suite config); `/admin` links
+it to the repository, and each deployed commit to that commit.
 
 A finding keeps its `summary` safe for the public page and puts what the failing source said (an error, a
 reason) in `detail`, which `/admin` and the `findings` tool show.

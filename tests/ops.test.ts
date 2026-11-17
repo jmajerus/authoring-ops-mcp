@@ -17,9 +17,10 @@ import { Store } from "../src/store.js";
 
 const config = parseConfig({
   suite: "test",
+  portal: "https://portal.example/mcp",
   tool_budget: 10,
   services: [
-    { name: "a-mcp", health: "http://a/health", mcp: "http://a/mcp", repo: "me/a-mcp" },
+    { name: "a-mcp", health: "http://a/health", mcp: "http://a/mcp", repo: "me/a-mcp", public: "https://a.example/" },
     { name: "b-mcp", mcp: "http://b/mcp", third_party: true },
   ],
   subscribers: { url: "http://t/api/subscribers", owner: "me/t-mcp" },
@@ -338,13 +339,17 @@ describe("the server", () => {
       const open = await tunnel.text();
       expect(open).toContain("b-mcp isn&#39;t listing its tools.");
       expect(open).toContain("joins: 2 found.");
-      for (const hidden of ["ECONNREFUSED", "10.0.0.9", "localdomain", "http://h/worklist", "/admin", "/api/status", "Poll now"]) expect(open).not.toContain(hidden);
+      for (const hidden of ["ECONNREFUSED", "10.0.0.9", "localdomain", "http://h/worklist", "/admin", "/api/status", "Poll now", "github.com"]) expect(open).not.toContain(hidden);
+      expect(open).toContain(`<a href="https://a.example/">a-mcp</a>`);
+      // The portal's web page, not its MCP address, which a browser can't open.
+      expect(open).toContain(`<a href="https://portal.example/">portal.example</a>`);
+      expect(open).not.toContain(`href="https://portal.example/mcp"`);
       expect((await fetch(`${base}/`, { headers: { "cf-ray": "x", "cf-access-jwt-assertion": "forged" } })).status).toBe(503);
       expect((await fetch(`${base}/`, { method: "POST", headers: { "cf-ray": "x" } })).status).toBe(405);
 
       expect(await (await fetch(`${base}/`)).text()).toContain(`<a href="/admin">admin</a>`);
       const admin = await (await fetch(`${base}/admin`)).text();
-      for (const shown of ["ECONNREFUSED", "10.0.0.9", "http://a.localdomain/admin", "http://h/worklist", "Poll now"]) expect(admin).toContain(shown);
+      for (const shown of ["ECONNREFUSED", "10.0.0.9", "http://a.localdomain/admin", "http://h/worklist", "Poll now", "https://github.com/me/a-mcp/commit/abcdef0", `<a href="https://portal.example/">The portal</a>`]) expect(admin).toContain(shown);
 
       const polled = poller.snapshot!.polled_at;
       w.tick(1);

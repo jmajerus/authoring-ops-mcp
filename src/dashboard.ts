@@ -31,6 +31,9 @@ export function ago(iso: string | null | undefined, now: number): string {
 
 const pill = (state: "up" | "stale" | "down", label: string) => `<span class="pill ${state}"><span class="dot"></span>${esc(label)}</span>`;
 const link = (url: string | undefined, label: string) => (url && /^https?:\/\//.test(url) ? `<a href="${esc(url)}">${esc(label)}</a>` : esc(label));
+/** The portal's web page: the config names its MCP address, which a browser can't use. */
+const site = (url: string) => { try { return new URL("/", url).href; } catch { return undefined; } };
+const portalLink = (url: string) => `${link(site(url), new URL(url).host)} <span class="s">(MCP at <code>${esc(url)}</code>)</span>`;
 const time = (iso: string | null | undefined, now: number) => (iso ? `<span title="${esc(iso)}">${esc(ago(iso, now))}</span>` : "");
 
 const STYLE = `:root{color-scheme:light dark;--border:#8884;--surface:#8881;--mut:#777;--ok:#1a7f37;--warn:#9a6700;--danger:#b3261e}
@@ -57,9 +60,10 @@ function servicesTable(s: Snapshot, now: number, admin: boolean): string {
       v.third_party ? `<span class="s">third party</span>` : "",
       admin && !v.up ? `<span class="s">${esc(v.health?.error ?? v.tools?.error)}</span>` : "",
     ].filter(Boolean).join(" ");
-    const repo = v.repo ? `https://github.com/${v.repo}` : undefined;
+    // The public page links each service's own public page; the admin page links the code.
+    const repo = admin && v.repo ? `https://github.com/${v.repo}` : undefined;
     const commit = d?.commit ? link(repo && `${repo}/commit/${d.commit}`, d.commit.slice(0, 7)) : "";
-    return `<tr><td>${link(repo, v.name)}</td><td>${pill(v.up ? "up" : "down", v.up ? "up" : "down")} <span class="s">${time(v.since, now)}</span></td>
+    return `<tr><td>${link(admin ? repo : v.public, v.name)}</td><td>${pill(v.up ? "up" : "down", v.up ? "up" : "down")} <span class="s">${time(v.since, now)}</span></td>
 <td>${esc(v.health?.version)}</td><td><code>${commit}</code></td><td>${time(d?.at, now)}</td>
 <td class="n">${v.tools ? v.tools.names.length : ""}</td><td class="w">${notes}</td>${admin ? `<td>${v.admin ? link(v.admin, "admin") : ""}</td>` : ""}</tr>`;
   }).join("\n");
@@ -104,7 +108,7 @@ function adminSection(s: Snapshot, worklist: string | undefined): string {
   const links = [
     worklist ? `<li>${link(worklist, "Cross-service worklist")} <span class="s">holdings-mcp: dismiss or restore a finding</span></li>` : "",
     ...s.services.filter((v) => v.admin).map((v) => `<li>${link(v.admin, `${v.name} admin`)}</li>`),
-    s.portal ? `<li>${link(s.portal, "The portal")}</li>` : "",
+    s.portal ? `<li>${link(site(s.portal), "The portal")}</li>` : "",
   ].filter(Boolean).join("\n");
   return `<h2>Admin</h2>
 <form method="post" action="/admin/poll"><button type="submit">Poll now</button> <span class="s">Reads the suite again; changes nothing.</span></form>
@@ -121,7 +125,7 @@ export function dashboardPage(s: Snapshot | undefined, suite: string, options: P
   const overall = down ? pill("down", `${down} down`) : fails ? pill("stale", "up, with failing checks") : pill("up", "all up");
   const budget = s.tool_budget !== undefined ? ` of a budget of ${s.tool_budget}` : "";
   return `${head}<h1>${esc(s.suite)} suite${admin ? " admin" : ""} ${overall}</h1>
-<p class="s">Polled ${time(s.polled_at, now)} ago. ${s.portal ? `Portal: ${link(s.portal, s.portal)}. ` : ""}Reloads every minute. This page reads and reports; it changes nothing.</p>
+<p class="s">Polled ${time(s.polled_at, now)} ago. ${s.portal ? `Portal: ${portalLink(s.portal)}. ` : ""}Reloads every minute. This page reads and reports; it changes nothing.</p>
 ${admin ? adminSection(s, options.worklist) : ""}
 <h2>Services</h2>
 ${servicesTable(s, now, admin)}
