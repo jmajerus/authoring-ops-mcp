@@ -4,6 +4,7 @@ import {
   type ChecksState, type FetchJson, type ListTools, type SubscribersState, type ToolsState,
   fetchJson, listTools, probeChecks, probeHealth, probeSubscribers, probeTools,
 } from "./probes.js";
+import type { SkillSet, SkillsVersion } from "./skills.js";
 import type { Store } from "./store.js";
 
 /** One poll's view of the suite. Everything the dashboard and the tools show comes from the last one. */
@@ -16,13 +17,14 @@ export interface Snapshot {
   checks?: ChecksState;
   tools_total: number;
   tool_budget?: number;
+  skills?: { version: SkillsVersion; names: string[]; tools_checked: number };
   findings: Finding[];
 }
 
 /** Tools change at a deploy, not between polls. A service with no /health is listed every poll: it's the only sign of life. */
 const LISTING_SECONDS = 600;
 
-export interface PollerDeps { fetchJson?: FetchJson; listTools?: ListTools; clock?: () => Date }
+export interface PollerDeps { fetchJson?: FetchJson; listTools?: ListTools; clock?: () => Date; skills?: SkillSet }
 
 export class Poller {
   snapshot: Snapshot | undefined;
@@ -31,11 +33,14 @@ export class Poller {
   private readonly get: FetchJson;
   private readonly list: ListTools;
   private readonly clock: () => Date;
+  /** The skills this release carries, if any. They don't change while it runs. */
+  readonly skills: SkillSet | undefined;
 
   constructor(readonly config: SuiteConfig, private readonly store: Store, deps: PollerDeps = {}) {
     this.get = deps.fetchJson ?? fetchJson;
     this.list = deps.listTools ?? listTools;
     this.clock = deps.clock ?? (() => new Date());
+    this.skills = deps.skills;
   }
 
   /** Polls now. Calls made while a poll is running share it. */
@@ -81,12 +86,16 @@ export class Poller {
         ...(health ? { health } : {}), ...(tools ? { tools } : {}),
       };
     });
-    const findings = findFindings(config, services, subscribers, checks, this.store, at);
+    const findings = findFindings(config, services, subscribers, checks, this.store, at, this.skills);
     this.store.save();
     this.snapshot = {
       suite: config.suite, ...(config.portal ? { portal: config.portal } : {}), polled_at: at, services,
       ...(subscribers ? { subscribers } : {}), ...(checks ? { checks } : {}),
       tools_total: toolsTotal(services), ...(config.tool_budget !== undefined ? { tool_budget: config.tool_budget } : {}),
+      ...(this.skills ? { skills: {
+        version: this.skills.version, names: this.skills.skills.map((s) => s.name),
+        tools_checked: Object.values(this.skills.toolsUsed ?? {}).flat().length,
+      } } : {}),
       findings,
     };
     return this.snapshot;

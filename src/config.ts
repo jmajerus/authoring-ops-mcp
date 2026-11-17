@@ -26,7 +26,12 @@ export interface SuiteConfig {
   /** A terminology registry (GET → { head|version, subscribers: [...] }). */
   subscribers?: { url: string; owner: string; lag_minutes: number; stale_minutes: number };
   /** Cross-service checks kept by another service (GET → { checks: [...] }, as holdings-mcp's /api/checks). */
-  checks?: { url: string; owner: string };
+  checks?: { url: string; owner: string; worklist?: string };
+  /** The skills repository and the ref a release carries (tools/vendor-skills.mjs copies it in at deploy). */
+  skills?: { repo: string; ref: string };
+  /** Suite-level routing for an agent, added to this server's MCP instructions. Keep it short: the portal joins
+   *  every server's instructions and cuts the result off at a length. */
+  guidance: string[];
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -79,7 +84,12 @@ export function parseConfig(raw: unknown): SuiteConfig {
       lag_minutes: minutes(raw.subscribers.lag_minutes, 30, "subscribers.lag_minutes"),
       stale_minutes: minutes(raw.subscribers.stale_minutes, 60, "subscribers.stale_minutes"),
     } } : {}),
-    ...(isObject(raw.checks) ? { checks: { url: httpUrl(raw.checks.url, "checks.url", true), owner: text(raw.checks.owner, "checks.owner") } } : {}),
+    ...(isObject(raw.checks) ? { checks: {
+      url: httpUrl(raw.checks.url, "checks.url", true), owner: text(raw.checks.owner, "checks.owner"),
+      ...(raw.checks.worklist !== undefined ? { worklist: httpUrl(raw.checks.worklist, "checks.worklist", true) } : {}),
+    } } : {}),
+    ...(isObject(raw.skills) ? { skills: { repo: text(raw.skills.repo, "skills.repo"), ref: text(raw.skills.ref, "skills.ref") } } : {}),
+    guidance: Array.isArray(raw.guidance) ? raw.guidance.map((line, i) => text(line, `guidance[${i}]`)) : [],
   };
 }
 

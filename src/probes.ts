@@ -54,7 +54,7 @@ export interface SubscribersState { ok: boolean; error?: string; head?: number; 
 
 export interface Check {
   name: string; result: "ok" | "drift" | "fail" | "skipped"; count: number; fix: string;
-  first_seen?: string; examples: string[];
+  first_seen?: string;
 }
 export interface ChecksState { ok: boolean; error?: string; items: Check[]; checked_at: string }
 
@@ -127,7 +127,6 @@ export async function probeChecks(url: string, get: FetchJson, at: string): Prom
       count: typeof c.count === "number" ? c.count : 0,
       fix: str(c.fix) ?? "",
       ...(str(c.first_seen) ? { first_seen: str(c.first_seen) } : {}),
-      examples: Array.isArray(c.examples) ? c.examples.filter(isObject).slice(0, 3).map((e) => str(e.detail) ?? str(e.ref) ?? "").filter(Boolean) : [],
     }));
     return { ok: true, items, checked_at: at };
   } catch (error) {

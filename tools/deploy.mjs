@@ -8,6 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { vendorSkills } from "./vendor-skills.mjs";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const NAME = "authoring-ops-mcp";
@@ -19,7 +20,8 @@ const USAGE = `Usage: npm run deploy -- [--provision | --env] [--skip-tests]
 
   (no flag)        build, test, install this checkout as a new release, restart, health-check, roll
                    back on failure, and record the branch and commit in /var/lib/${NAME}/deployed.json
-                   (the server's /health reports it)
+                   (the server's /health reports it). The release carries the skills at the ref the suite
+                   config pins, from the checkout beside this one (see npm run skills -- --help)
   --provision      one-time setup of the LXC (Node 22, ops user, directories)
   --env            copy the server's settings from .env into its /etc/${NAME}/env (mode 0640) and
                    restart: ${ENV_NAMES.join(", ")}.
@@ -90,10 +92,13 @@ ${WAIT_FOR_HEALTH}`);
 async function deploy({ skipTests }) {
   execFileSync("npm", ["run", "build"], { cwd: root, stdio: "inherit" });
   if (!skipTests) execFileSync("npm", ["test"], { cwd: root, stdio: "inherit" });
+  // The skills at the ref the suite config pins, never the checkout's working files.
+  const skills = vendorSkills();
+  console.log(skills ? `skills: ${skills.skills.length} from ${skills.repo} at ${skills.ref} (${skills.commit.slice(0, 7)})` : "The suite config pins no skills.");
 
   const id = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-");
   const tarball = path.join(os.tmpdir(), `${NAME}-${id}.tgz`);
-  execFileSync("tar", ["czf", tarball, "-C", root, "dist", "deploy", "suites", "package.json", "package-lock.json"]);
+  execFileSync("tar", ["czf", tarball, "-C", root, "dist", "deploy", "suites", ...(skills ? ["skills"] : []), "package.json", "package-lock.json"]);
   execFileSync("scp", [...sshOptions, tarball, `${HOST}:/tmp/`], { env: sshEnv(), stdio: "inherit" });
   fs.rmSync(tarball);
 

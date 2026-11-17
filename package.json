@@ -6,6 +6,7 @@
     "ops": "tsx --env-file-if-exists=.env src/cli.ts",
     "serve": "tsx --env-file-if-exists=.env src/cli.ts serve",
     "status": "tsx --env-file-if-exists=.env src/cli.ts status",
+    "skills": "node tools/vendor-skills.mjs",
     "build": "tsc -p tsconfig.build.json",
     "deploy": "node --env-file-if-exists=.env tools/deploy.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
