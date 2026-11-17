@@ -157,8 +157,8 @@ The two skill tools are registered only when the release carries skills.
   of life, and a ten-minute cache would hide an outage for ten minutes.
 - **A public page at `/` and an admin page at `/admin`**, as the sibling servers have. `/` is safe for anyone to
   see (findings' `summary` only; `detail`, addresses, and links to writable pages stay off it) and is open through
-  the tunnel without a token, as holdings-mcp's root is; the Access application decides whether outsiders reach
-  it. `/admin`, `/health`, and `/api/*` are LAN only; `/mcp` goes through Access.
+  the tunnel without a token, as holdings-mcp's root is. The shared Access application covers `/mcp` alone on
+  each host (2026-11-17; it had covered whole hosts), so outsiders reach `/`. `/admin`, `/health`, and `/api/*` are LAN only; `/mcp` goes through Access.
 - **Deploy has no `--main` yet.** It deploys the current checkout and records `dirty`, as holdings-mcp's does.
   corpus-mcp's `--main`, `--pr`, and `--current` can come once the repository has a remote.
 

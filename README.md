@@ -78,9 +78,10 @@ every service lists, so a renamed or retired tool shows up as a finding before a
 
 Neither page changes anything; the admin page links to pages that do. Through the tunnel, `/` answers without a
 token, as holdings-mcp's library page does (a token, if sent, must still verify), `/mcp` needs a verified Access
-token, and everything else is a 404. Whether `/` is actually reachable from outside is up to the Access
-application: it covers the whole host now, so `/` asks for a sign-in like the rest. A bypass policy for `/` would
-open it.
+token, and everything else is a 404. The suite's Access application covers only `/mcp` on each host (with
+managed OAuth for the portal), so `/` reaches the server, which answers it with the public page and refuses
+everything else without a token. A path the application covers takes precedence over the host, and an empty
+path would cover the whole host, `/` included.
 
 A finding keeps its `summary` safe for the public page and puts what the failing source said (an error, a
 reason) in `detail`, which `/admin` and the `findings` tool show.
