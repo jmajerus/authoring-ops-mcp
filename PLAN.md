@@ -1,7 +1,8 @@
 # authoring-ops-mcp — plan
 
-**Status: steps 1–4 of "Order of work" are built and run against the live suite (2026-11-17). It isn't deployed:
-the container doesn't exist yet, and authoring-skills has no tag to pin. The portal (step 5) isn't started.**
+**Status: steps 1–5 of "Order of work" are done (2026-11-17). It is deployed to `authoring-ops-mcp.localdomain`
+with the skills at authoring-skills `v0.1.0`, behind its own Cloudflare Access application, and in the portal
+as `suite`.**
 
 ## What it is
 
