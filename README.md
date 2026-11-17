@@ -5,7 +5,8 @@ The front door to the authoring suite behind the Authoring Portal (`suite_` ther
 - **Routing.** Its MCP instructions tell an agent which server does what and where to start (holdings'
   `find_work` for anything the owner has). The portal shows them ahead of every other server's.
 - **Health.** It polls every service each minute and answers whether the suite is working. Each finding says
-  how bad it is and who owns the fix. One LAN dashboard shows the same.
+  how bad it is and who owns the fix. A page at `/` shows the same to anyone; `/admin`, on the LAN, adds
+  the errors behind each finding and the links to where fixes are made.
 - **Skills.** It serves the [authoring skills](https://github.com/jmajerus/authoring-skills) to sessions that
   have none installed, and checks that every tool the skills call is still listed by its service.
 
@@ -14,7 +15,7 @@ It reads and reports, and changes nothing. See [PLAN.md](PLAN.md) for what is bu
 
 | | |
 |---|---|
-| Dashboard | http://authoring-ops-mcp.localdomain:8000/ (LAN) |
+| Pages | http://authoring-ops-mcp.localdomain:8000/ (public) and `/admin` (LAN) |
 | MCP | `https://authoring-ops-mcp.majerus.us/mcp`, behind Cloudflare Access, added to the portal with the prefix `suite` |
 
 ## Tools
@@ -67,13 +68,22 @@ every service lists, so a renamed or retired tool shows up as a finding before a
 
 | Path | Who | What |
 |---|---|---|
-| `/` | LAN | the dashboard: services, findings by owner, terminology subscribers, skills |
+| `/` | anyone | the public page: services, findings by owner, terminology subscribers, skills. No addresses, no error text, no links to anything writable |
+| `/admin` | LAN | the same, with what each failing source said, the services' admin pages, the holdings worklist, and **Poll now** |
+| `POST /admin/poll` | LAN | the admin page's button: poll now, then back to `/admin`. Refused from another site's page |
 | `/health` | LAN | this server's own health, under the contract, with the skills ref it carries |
 | `/api/status` | LAN | the last poll in full, as JSON |
-| `POST /api/poll` | LAN | poll now (after a deploy, say); it still only reads |
+| `POST /api/poll` | LAN | poll now (after a deploy, say), answering with the poll |
 | `/mcp` | LAN, or Cloudflare Access | the four tools |
 
-Through the tunnel, everything but `/mcp` is a 404, and `/mcp` needs a verified Access token.
+Neither page changes anything; the admin page links to pages that do. Through the tunnel, `/` answers without a
+token, as holdings-mcp's library page does (a token, if sent, must still verify), `/mcp` needs a verified Access
+token, and everything else is a 404. Whether `/` is actually reachable from outside is up to the Access
+application: it covers the whole host now, so `/` asks for a sign-in like the rest. A bypass policy for `/` would
+open it.
+
+A finding keeps its `summary` safe for the public page and puts what the failing source said (an error, a
+reason) in `detail`, which `/admin` and the `findings` tool show.
 
 ## Run it
 

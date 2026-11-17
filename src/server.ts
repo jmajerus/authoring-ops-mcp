@@ -11,9 +11,10 @@ import type { Poller } from "./poller.js";
 
 /**
  * Streamable HTTP at /mcp (stateless: a fresh server per request, JSON responses), on holdings-mcp's pattern.
- * /mcp is open on the LAN and, through Cloudflare, to a verified Access token. Everything else is LAN only
- * (a 404 through Access): the dashboard at /, /health, GET /api/status (the last poll in full), and
- * POST /api/poll (poll now, e.g. after a deploy; it still only reads).
+ * /mcp is open on the LAN and, through Cloudflare, to a verified Access token. The public page at / is for
+ * anyone the tunnel lets through, with or without a token: it shows nothing a stranger shouldn't see.
+ * Everything else is LAN only (a 404 through the tunnel): the admin page at /admin and its POST /admin/poll,
+ * /health, GET /api/status (the last poll in full), and POST /api/poll (poll now, e.g. after a deploy).
  */
 
 export interface ServeOptions {
@@ -39,6 +40,13 @@ export function healthStatus(poller: Poller, stateDir = "data") {
   };
 }
 
+/** A form post from this server's own page: no Origin (an older browser, curl) or one naming this host. */
+function sameOrigin(req: http.IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try { return new URL(origin).host === req.headers.host; } catch { return false; }
+}
+
 export function serveHttp(poller: Poller, options: ServeOptions): Promise<http.Server> {
   const name = `${poller.config.suite}-ops-mcp`;
   const access = options.access ?? requestAccessConfig(process.env, [name, `${name}.localdomain`]);
@@ -47,8 +55,20 @@ export function serveHttp(poller: Poller, options: ServeOptions): Promise<http.S
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
       const { via } = await authorizeRequest(req, url.pathname, access, options.accessKeys);
+      if (url.pathname === "/") {
+        if (req.method !== "GET" && req.method !== "HEAD") return void res.writeHead(405, { allow: "GET, HEAD" }).end();
+        const page = dashboardPage(poller.snapshot, poller.config.suite, { lan: via === "lan" });
+        return void res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(req.method === "HEAD" ? undefined : page);
+      }
       if (url.pathname !== "/mcp") {
         if (via !== "lan") return void res.writeHead(404, json).end(JSON.stringify({ error: "Not found." }));
+        if (url.pathname === "/admin/poll") {
+          if (req.method !== "POST") return void res.writeHead(405, { allow: "POST" }).end();
+          // Only from the admin page itself, not a form on some other site the browser has open.
+          if (!sameOrigin(req)) return void res.writeHead(403).end();
+          await poller.poll();
+          return void res.writeHead(303, { location: "/admin" }).end();
+        }
         if (url.pathname === "/api/poll") {
           if (req.method !== "POST") return void res.writeHead(405, { ...json, allow: "POST" }).end(JSON.stringify({ error: "POST to poll." }));
           return void res.writeHead(200, json).end(JSON.stringify(await poller.poll()));
@@ -57,7 +77,7 @@ export function serveHttp(poller: Poller, options: ServeOptions): Promise<http.S
         const send = (type: string, body: string) => void res.writeHead(200, { "content-type": type, "cache-control": "no-store" }).end(req.method === "HEAD" ? undefined : body);
         if (url.pathname === "/health") return send("application/json", JSON.stringify(healthStatus(poller, options.stateDir)));
         if (url.pathname === "/api/status") return send("application/json", JSON.stringify(poller.snapshot ?? null));
-        if (url.pathname === "/") return send("text/html; charset=utf-8", dashboardPage(poller.snapshot, poller.config.suite));
+        if (url.pathname === "/admin") return send("text/html; charset=utf-8", dashboardPage(poller.snapshot, poller.config.suite, { admin: true, worklist: poller.config.checks?.worklist }));
         return void res.writeHead(404).end();
       }
       if (req.method === "OPTIONS") return void res.writeHead(204).end();
@@ -86,7 +106,7 @@ export function serveHttp(poller: Poller, options: ServeOptions): Promise<http.S
   });
   return new Promise((resolve) => server.listen(options.port, options.host, () => {
     const a = server.address();
-    console.error(`${name} ${VERSION} listening on ${typeof a === "object" && a ? `${a.address}:${a.port}` : options.port} (/, /mcp, /health)`);
+    console.error(`${name} ${VERSION} listening on ${typeof a === "object" && a ? `${a.address}:${a.port}` : options.port} (/, /admin, /mcp, /health)`);
     resolve(server);
   }));
 }
