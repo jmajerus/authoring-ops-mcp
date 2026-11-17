@@ -1,4 +1,5 @@
 import type { AddressInfo } from "node:net";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -30,7 +31,7 @@ const config = parseConfig({
 function skillsDir(toolsUsed: unknown = { "a-mcp": ["one"] }): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ops-skills-"));
   fs.mkdirSync(path.join(dir, "survey"));
-  fs.writeFileSync(path.join(dir, "survey/SKILL.md"), "---\nname: survey\ndescription: Survey a topic. Use when asked what the library has.\n---\n\n# Survey\n\nRead [library.md](library.md). Call `one`, then `two_more`; report `page_label`.\n");
+  fs.writeFileSync(path.join(dir, "survey/SKILL.md"), "---\nname: survey\ndescription: Survey a topic. Use when asked what the library has.\n---\n\n# Survey\n\nRead [library.md](library.md). Call `one`, then `two_more` and `check`; report `page_label`.\n");
   fs.writeFileSync(path.join(dir, "survey/library.md"), "# The library\n");
   fs.writeFileSync(path.join(dir, "version.json"), JSON.stringify({ repo: "me/skills", ref: "v1.0.0", commit: "0123456789abcdef" }));
   if (toolsUsed) fs.writeFileSync(path.join(dir, "tools-used.json"), JSON.stringify(toolsUsed));
@@ -95,7 +96,7 @@ describe("polling", () => {
     const s = await poller.poll();
     expect(s.findings).toEqual([]);
     expect(s.services.map((v) => v.up)).toEqual([true, true]);
-    expect(s.tools_total).toBe(7);
+    expect(s.tools_total).toBe(5); // with no skills, only status and findings are this server's
   });
 
   it("reports a service down since it went down, and forgets it once it's back", async () => {
@@ -178,7 +179,7 @@ describe("polling", () => {
   it("gives a source five minutes before calling it unreadable, and reports a blown tool budget", async () => {
     const { w, poller } = world();
     w.checks = new Error("HTTP 502");
-    w.tools["http://b/mcp"] = Array.from({ length: 7 }, (_, i) => `t${i}`);
+    w.tools["http://b/mcp"] = Array.from({ length: 9 }, (_, i) => `t${i}`);
     expect(ids(await poller.poll())).toEqual(["tool-budget"]);
     w.tick(6);
     expect(ids(await poller.poll()).sort()).toEqual(["source:checks", "tool-budget"]);
@@ -199,7 +200,7 @@ describe("skills", () => {
     expect(loadSkills(path.join(os.tmpdir(), "no-such-skills"))).toBeUndefined();
     const set = loadSkills(skillsDir())!;
     expect(set.skills).toEqual([{ name: "survey", description: "Survey a topic. Use when asked what the library has.", files: ["SKILL.md", "library.md"] }]);
-    expect(set.mentioned).toEqual(["page_label", "two_more"]);
+    expect(set.mentioned).toEqual(["check", "one", "page_label", "two_more"]);
     expect(readSkillFile(set, "survey", "library.md")).toBe("# The library\n");
     expect(() => readSkillFile(set, "survey", "../version.json")).toThrow(/no file/);
     expect(() => readSkillFile(set, "nope")).toThrow(/The skills are: survey/);
@@ -210,6 +211,7 @@ describe("skills", () => {
     const s = await poller.poll();
     expect(s.findings).toEqual([]);
     expect(s.skills).toMatchObject({ version: { ref: "v1.0.0" }, names: ["survey"], tools_checked: 1 });
+    expect(s.tools_total).toBe(7);
   });
 
   it("reports a tool the skills call that a service dropped, but not from a listing that failed", async () => {
@@ -223,8 +225,8 @@ describe("skills", () => {
 
   it("reports a tool a skill names that the list doesn't watch, a service the suite lacks, and a missing list", async () => {
     const a = world(loadSkills(skillsDir({ "a-mcp": ["one"], "z-mcp": ["gone"] })));
-    a.w.tools["http://b/mcp"] = ["three", "two_more"];
-    expect(ids(await a.poller.poll()).sort()).toEqual(["skills:service:z-mcp", "skills:unwatched:b-mcp:two_more"]);
+    a.w.tools["http://b/mcp"] = ["check", "three", "two_more"];
+    expect(ids(await a.poller.poll()).sort()).toEqual(["skills:service:z-mcp", "skills:unwatched:b-mcp:check", "skills:unwatched:b-mcp:two_more"]);
     const b = world(loadSkills(skillsDir(null)));
     expect(ids(await b.poller.poll())).toEqual(["skills:no-tool-list"]);
   });
@@ -235,6 +237,45 @@ describe("skills", () => {
     expect(withSkills).toContain("get_skill");
     expect(instructions(world().poller)).not.toContain("get_skill");
     expect(withSkills.length).toBeLessThan(1200);
+  });
+});
+
+describe("vendoring the skills", () => {
+  // The script is plain JavaScript beside the build; vitest imports it as it is.
+  const repo = () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ops-vendor-"));
+    const checkout = path.join(root, "skills-repo");
+    fs.mkdirSync(path.join(checkout, "survey"), { recursive: true });
+    fs.mkdirSync(path.join(checkout, "shared"));
+    fs.writeFileSync(path.join(checkout, "survey/SKILL.md"), "---\nname: survey\ndescription: d\n---\n");
+    fs.writeFileSync(path.join(checkout, "shared/library.md"), "# shared\n");
+    fs.symlinkSync("../shared/library.md", path.join(checkout, "survey/library.md"));
+    fs.writeFileSync(path.join(checkout, "tools-used.json"), "{}");
+    fs.writeFileSync(path.join(root, "secret.txt"), "not a skill\n");
+    const git = (...args: string[]) => execFileSync("git", ["-C", checkout, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { stdio: "ignore" });
+    git("init", "-q"); git("add", "-A"); git("commit", "-qm", "skills"); git("tag", "v1");
+    const suite = path.join(root, "suite.json");
+    fs.writeFileSync(suite, JSON.stringify({ skills: { repo: "me/skills-repo", ref: "v1" } }));
+    return { root, checkout, suite, git, out: path.join(root, "out") };
+  };
+
+  it("copies a link to a shared file as the file, and says whether tools-used.json came along", async () => {
+    const { vendorSkills } = await import("../tools/vendor-skills.mjs");
+    const r = repo();
+    expect(vendorSkills({ from: r.checkout, out: r.out, suite: r.suite })).toMatchObject({ ref: "v1", skills: ["survey"], tools_used: true });
+    expect(fs.lstatSync(path.join(r.out, "survey/library.md")).isFile()).toBe(true);
+    expect(fs.readFileSync(path.join(r.out, "survey/library.md"), "utf8")).toBe("# shared\n");
+  });
+
+  it("refuses a link out of the skills, or to a folder, and leaves no copy", async () => {
+    const { vendorSkills } = await import("../tools/vendor-skills.mjs");
+    const r = repo();
+    fs.symlinkSync("../../secret.txt", path.join(r.checkout, "survey/secret.md"));
+    expect(() => vendorSkills({ worktree: true, from: r.checkout, out: r.out, suite: r.suite })).toThrow(/links outside the skills/);
+    expect(fs.existsSync(r.out)).toBe(false);
+    fs.rmSync(path.join(r.checkout, "survey/secret.md"));
+    fs.symlinkSync("../shared", path.join(r.checkout, "survey/shared"));
+    expect(() => vendorSkills({ worktree: true, from: r.checkout, out: r.out, suite: r.suite })).toThrow(/links to a folder/);
   });
 });
 

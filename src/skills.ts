@@ -15,7 +15,7 @@ export interface SkillSet {
   skills: Skill[];
   /** tools-used.json: the tools the skills call, by service. Undefined when that ref has no such file. */
   toolsUsed?: Record<string, string[]>;
-  /** Every `name_like_this` the skills' Markdown puts in backticks: tool names among field names. */
+  /** Every `name` or `name_like_this` the skills' Markdown puts in backticks: tool names among field names. */
   mentioned: string[];
 }
 
@@ -39,7 +39,7 @@ export function loadSkills(dir: string): SkillSet | undefined {
   const skills = fs.readdirSync(dir).filter((d) => fs.existsSync(path.join(dir, d, "SKILL.md"))).sort().map((name): Skill => {
     const files = filesUnder(path.join(dir, name));
     for (const file of files.filter((f) => f.endsWith(".md"))) {
-      for (const m of fs.readFileSync(path.join(dir, name, file), "utf8").matchAll(/`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`/g)) mentioned.add(m[1]);
+      for (const m of fs.readFileSync(path.join(dir, name, file), "utf8").matchAll(/`([a-z][a-z0-9]*(?:_[a-z0-9]+)*)`/g)) mentioned.add(m[1]);
     }
     const front = fs.readFileSync(path.join(dir, name, "SKILL.md"), "utf8").match(/^---\n([\s\S]*?)\n---\n/)?.[1] ?? "";
     return { name, description: front.match(/^description: (.*)$/m)?.[1]?.trim() ?? "", files: ["SKILL.md", ...files.filter((f) => f !== "SKILL.md")] };
