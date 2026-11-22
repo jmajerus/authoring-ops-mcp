@@ -18,13 +18,13 @@ of the friction came from source text and metadata, and from places where the to
 |---|---|---|---|
 | 1 | PDF text drops ligatures ("Te" for "The"; also fi, ft), so exact matching rejects correct quotes | corpus-mcp | open |
 | 2 | A PDF with no page labels gets `page_label` = file position; *Zero Spaces* prints one lower | corpus-mcp | open |
-| 3 | The skill allows partial quotes as a warning; `validate_markdown` errors on partial run-in quotes | iasp-mcp + authoring-skills | open |
-| 4 | Two quote markers before one paragraph (first draft only): the first is checked against an empty passage | iasp-mcp + authoring-skills | open |
+| 3 | The skill allows partial quotes as a warning; `validate_markdown` errors on partial run-in quotes | iasp-mcp + authoring-skills | fix in review (iasp-mcp#2) |
+| 4 | Two quote markers before one paragraph (first draft only): the first is checked against an empty passage | iasp-mcp + authoring-skills | fix in review (iasp-mcp#2) |
 | 5 | Quotes saved before and after filing land on two works (`quote:762`, 765); `cite_quote` still warns "not filed" after the match | quote-mcp (holdings-mcp check) | open |
-| 6 | Ghost render gives the note after a quoted paragraph that quote's `data-quote-*` attributes | iasp-mcp | open |
+| 6 | Ghost render gives the note after a quoted paragraph that quote's `data-quote-*` attributes | iasp-mcp | fix in review (iasp-mcp#2) |
 | 7 | Wrong or thin Calibre metadata passes straight into the reference list | corpus-mcp + a person | open |
 | 8 | A 255-page PDF with no outline is costly to read through `read_book` | corpus-mcp | open |
-| 9 | Render takes only inline Markdown or a server path; output names can collide with the source | iasp-mcp | open |
+| 9 | Render takes only inline Markdown or a server path; output names can collide with the source | iasp-mcp | fix in review (iasp-mcp#2) |
 | 10 | corpus-mcp stopped answering `/health` for a few minutes mid-session | corpus-mcp | observed |
 | 11 | No skill fits a book review | authoring-skills | proposed (sketch below) |
 | 12 | Gaps outside the suite: no fact-check helper, no Ghost publish step | suite (new) | idea |
@@ -63,6 +63,8 @@ this run `validate_markdown` returned `quote-text-differs` errors for run-in par
 saved quote (ids 875, 886, 879). The fix was to quote each saved text whole. Either allow excerpts in run-ins
 with a warning, or have the skill say to save exactly the words that will be quoted.
 
+**Fix in review** (jmajerus/iasp-mcp#2): decided in the skill's favour. In a run-in paragraph, an unchanged quoted span of three words or more, or runs joined by ellipses, is a `quote-text-excerpt` warning, not an error. authoring-skills needs no change.
+
 ### 4. Stacked quote markers (iasp-mcp, authoring-skills)
 
 In the first draft sent to `validate_markdown`, `<!-- quote 891 -->` and `<!-- quote 892 -->` sat on
@@ -79,6 +81,8 @@ as "having become literally blind" [@collet2018zero, p. 113] …
 and 892 took the paragraph. The committed source splits them into two paragraphs, one marker each, so it no
 longer shows the problem. Either accept several ids in one
 marker (`<!-- quote 891 892 -->`) or say in the skill: one marker per paragraph.
+
+**Fix in review** (jmajerus/iasp-mcp#2): stacked markers are accepted, one per line before the passage. The validator checks each against the paragraph and matches it to the citation at that quote's stored locator, and Ghost and HTML nest one wrapper per marker. There is no `<!-- quote 891 892 -->` form.
 
 ### 5. One book, two quote-store works (quote-mcp)
 
@@ -97,6 +101,8 @@ In the Ghost render, the `.note .scope` div after the last quoted paragraph carr
 scope note to Collet's quotation. The HTML render's scope note is clean, so the leak is in the Ghost
 exporter. Marker state should reset after the block it marks. The committed Ghost file is kept as rendered,
 as the reproduction; render again once the fix lands.
+
+**Fix in review** (jmajerus/iasp-mcp#2): the block right after a marker consumes it. In Ghost, a run-in paragraph gets its own `iasp-quote` wrapper, as in HTML, and a heading, list or table ends the marker. The HTML filter had a related leak (a marker before a heading bound to the paragraph after it), also fixed. Re-render the Ghost file once #2 is merged and deployed.
 
 ### 7. Metadata passes through (corpus-mcp, a person)
 
@@ -125,6 +131,8 @@ The iasp server can't open the session's files, so the 14 KB source was pasted i
 saved the rendered `md` under the source's name and overwrote it (its own mistake). An upload step, or
 rendering a draft stored server-side, would remove the pasting; a default `-rendered.md` name would prevent
 the collision.
+
+**Fix in review** (jmajerus/iasp-mcp#2): an output that would overwrite the source is written as `<name>-rendered.<ext>`, with a warning. The upload / server-side-draft idea is out of scope.
 
 ### 10. corpus-mcp outage (corpus-mcp)
 
