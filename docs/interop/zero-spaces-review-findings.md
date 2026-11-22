@@ -28,6 +28,7 @@ of the friction came from source text and metadata, and from places where the to
 | 10 | corpus-mcp stopped answering `/health` for a few minutes mid-session | corpus-mcp | observed |
 | 11 | No skill fits a book review | authoring-skills | proposed (sketch below) |
 | 12 | Gaps outside the suite: no fact-check helper, no Ghost publish step | suite (new) | idea |
+| 13 | Partial-sentence citations saved for the review appear on the public quotes page beside collected passages | quote-mcp + authoring-skills | open |
 
 ### 1. Dropped ligatures in PDF text (corpus-mcp)
 
@@ -130,7 +131,8 @@ A sketch for authoring-skills:
 5. **One question, or none.** When the person has given broad permission ("use the full suite"), save and file
    without asking, and say so in the handover.
 6. **Secure quotes** as portal-article step 4, checking the printed page against the file page, and setting
-   `chapter_author` for edited volumes.
+   `chapter_author` for edited volumes. Save exactly the words the review quotes; they are citations, not
+   additions to the collection (finding 13).
 7. **File and pin** as portal-article step 5.
 8. **Write.** A bibliographic line; what the book is; what it does well; where it fails, with quotes; the
    comparison; a verdict; a `.note .scope` saying what was read in full and what was sampled. 1,200–2,000
@@ -138,7 +140,8 @@ A sketch for authoring-skills:
 9. **List claims to check:** every fact from general knowledge goes in the disclosure note and the handover,
    with a web check where the session has search.
 10. **Validate, render, hand over** as portal-article steps 7–9, with `ghost` first when the piece is for the
-    blog.
+    blog. Report the citations saved and their project tag, and propose none of them for the collection
+    (finding 13).
 
 It would be served from here once authoring-skills is tagged and the ref in `suites/authoring.json` changes.
 
@@ -147,6 +150,37 @@ It would be served from here once authoring-skills is tagged and the ref in `sui
 - No way to verify general-knowledge facts. A web search didn't confirm the source of the Deleuze epigraph,
   so it is flagged in the review's disclosure.
 - No step that publishes to Ghost as a draft (Ghost Admin API).
+
+### 13. Citations on the public quotes page (quote-mcp, authoring-skills)
+
+Ten of the 18 quotes saved for the review are parts of sentences: 875, 876, 878, 883, 885, 886, 887, 890,
+891 and 892. The public quotes page shows them beside passages John chose to keep. Three of them (887, 891,
+892) were saved only as evidence of the book's errors.
+
+The line to draw is purpose, not length. A quote saved because a piece cites it is a **citation**; a quote
+the owner chose to keep for its own sake is a **collected passage**. Saving full sentences instead would not
+help: a full sentence chosen for one point in one review looks like a passage worth keeping, and deciding
+that is the owner's judgment, not an agent's. Neither should a skill offer a shortlist for promotion: a
+shortlist is a filter, so the agent would still be choosing what is interesting.
+
+Proposed:
+
+- **quote-mcp:** keep agent-saved quotes off the public page until the owner promotes one. The store already
+  records them: each has `generative: true`, an origin of kind `agent` with its request id, and a G label
+  (G875 and so on). Promotion is a deliberate act by a person.
+- **quote-mcp:** exclude partial sentences from anything automatic (the public page, suggestions), whoever
+  saved them, but let the owner promote one by hand; a passage worth keeping is not always a complete
+  sentence. Detect fragments from the source, not from the quote's shape: a verified quote is anchored to the
+  book text, so the store knows whether it begins at a sentence start and ends at a sentence end. Shape
+  misleads: 879 ("Hence, eradicating …") opens with a capital and ends with a period but has no main verb,
+  and 883 ("collaboration consists in generating possibility.") is a whole clause that opens in lowercase.
+  Only paper-book quotes, with no text to check against, need a shape-based guess.
+- **authoring-skills:** a skill saves the words a piece quotes as citations, says so in its handover, and
+  proposes none of them for the collection. portal-article and the book-review sketch (finding 11) should
+  say this. quote-harvest is different: there the owner has asked for proposals, and proposing is the task.
+
+This replaces the "save the full sentence and quote part of it" fix suggested during the session. Fixing
+findings 1 and 3 still matters: they are what pushed the session toward saving exact runs in the first place.
 
 ## What worked
 
@@ -167,6 +201,9 @@ It would be served from here once authoring-skills is tagged and the ref in `sui
 - Zotero staging: give *Zero Spaces* (`W7SF3AIQ`) its date and publisher, and *The Onlife Manifesto*
   (`RSQW6CWM`) Floridi as editor; then re-render the review.
 - Calibre: the same for `main:14` and `main:1160`, and the ISBN for `main:1396`.
+- Until finding 13 lands, the ten partial-sentence quotes (875, 876, 878, 883, 885, 886, 887, 890, 891, 892)
+  show on the public quotes page; hide them there if that shouldn't wait. Deleting them would break the
+  review's quote markers.
 - Confirm the facts the review takes from general knowledge (listed in its disclosure note) before it is
   published.
 - Copy `zero-spaces-review.pdf` from `/var/lib/iasp-mcp/renders/zero-spaces-review/` on the iasp-mcp server into
