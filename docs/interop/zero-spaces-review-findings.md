@@ -16,16 +16,16 @@ of the friction came from source text and metadata, and from places where the to
 
 | # | Finding | Owner | Status |
 |---|---|---|---|
-| 1 | PDF text drops ligatures ("Te" for "The"; also fi, ft), so exact matching rejects correct quotes | corpus-mcp | open |
-| 2 | A PDF with no page labels gets `page_label` = file position; *Zero Spaces* prints one lower | corpus-mcp | open |
+| 1 | PDF text drops ligatures ("Te" for "The"; also fi, ft), so exact matching rejects correct quotes | corpus-mcp | fix in review (corpus-mcp#53) |
+| 2 | A PDF with no page labels gets `page_label` = file position; *Zero Spaces* prints one lower | corpus-mcp | fix in review (corpus-mcp#53); then a pin and a quote-mcp locator update |
 | 3 | The skill allows partial quotes as a warning; `validate_markdown` errors on partial run-in quotes | iasp-mcp + authoring-skills | fixed in iasp-mcp#2 (merged, not deployed) |
 | 4 | Two quote markers before one paragraph (first draft only): the first is checked against an empty passage | iasp-mcp + authoring-skills | fixed in iasp-mcp#2 (merged, not deployed) |
 | 5 | Quotes saved before and after filing land on two works (`quote:762`, 765); `cite_quote` still warns "not filed" after the match | quote-mcp (holdings-mcp check) | fix in review (quote-mcp#34) |
 | 6 | Ghost render gives the note after a quoted paragraph that quote's `data-quote-*` attributes | iasp-mcp | fixed in iasp-mcp#2 (merged, not deployed) |
-| 7 | Wrong or thin Calibre metadata passes straight into the reference list | corpus-mcp + a person | open |
-| 8 | A 255-page PDF with no outline is costly to read through `read_book` | corpus-mcp | open |
+| 7 | Wrong or thin Calibre metadata passes straight into the reference list | corpus-mcp + a person | year warning in review (corpus-mcp#53); records need a person |
+| 8 | A 255-page PDF with no outline is costly to read through `read_book` | corpus-mcp | fix in review (corpus-mcp#53) |
 | 9 | Render takes only inline Markdown or a server path; output names can collide with the source | iasp-mcp | fixed in iasp-mcp#2 (merged, not deployed) |
-| 10 | corpus-mcp stopped answering `/health` for a few minutes mid-session | corpus-mcp | observed; add_quote retry in review (quote-mcp#34) |
+| 10 | corpus-mcp stopped answering `/health` for a few minutes mid-session | corpus-mcp | cause unconfirmed; logging (corpus-mcp#53) and add_quote retry (quote-mcp#34) in review |
 | 11 | No skill fits a book review | authoring-skills | skill in review (authoring-skills#3) |
 | 12 | Gaps outside the suite: no fact-check helper, no Ghost publish step | suite (new) | idea |
 | 13 | Partial-sentence citations saved for the review appear on the public quotes page beside collected passages | quote-mcp + authoring-skills | in review (authoring-skills#3, quote-mcp#34) |
@@ -41,6 +41,8 @@ Possible fixes: repair the common dropped ligatures at index time; or match liga
 corrected reading with a flag; and report text quality in `get_book_outline` so the problem shows before
 quoting starts.
 
+**Fix in review** (jmajerus/corpus-mcp#53): `/api/verify` matches across lost Th, ft and fi/ff/fl letters. It returns the printed reading as `text`, with a `restored: { kind: "dropped-ligatures", … }` field, and keeps `anchor.text` as stored, so quote-mcp can save "This non-tangible …" unchanged. Tried on `main:14`, the refused quote now matches. `get_book_outline` has a `text_quality` section (for `main:14`: Th 668 damaged words / 32 intact, ft 89 / 0, 184 unreadable characters on file pages 3–4). Open on quote-mcp's side: its edit check may reject a later edit to a quote saved with a restored reading.
+
 ### 2. PDF page labels off by one (corpus-mcp)
 
 The PDF carries no page-label metadata, so `page_label` equals `file_page`. The printed number is one lower
@@ -55,6 +57,8 @@ The renders carry the stored locator too. In the HTML and Ghost files, each quot
 `data-quote-locator` gives the file page (quote 875: `p. 17`) while the visible citation gives the printed
 page (16). Anything that reads those attributes as provenance is sent one page high. Once quotes 875–887 and
 891–892 have the right printed pages, the review should be rendered again.
+
+**Fix in review** (jmajerus/corpus-mcp#53): `get_book_outline` has a `page_labels` section that says where labels come from and infers the printed numbering from the contents and surviving folios. For `main:14`: offset +1, 65 of 71 contents entries and 14 of 14 folios agree, none against. A new `pin_page_labels` tool stores a pin, and the ten-minute refresh relabels the index and quote-mcp's anchors (as `reanchored` changes). After deploy, check one page with `render_page`, then pin `main:14` file page 2 = "1". Open on quote-mcp's side: `followAnchors` doesn't yet update a quote's stored locator, so `cite_quote` and the renders keep the old pages until it does (or the quotes get `update_quote`).
 
 ### 3. Partial quotes: skill and validator disagree (iasp-mcp, authoring-skills)
 
@@ -119,6 +123,8 @@ The skill says to file books as given, so these errors reach the reference list:
 `cite_passage` already offers a printed year when Calibre has none. It could also flag a Calibre year that
 disagrees with the book. Editors and chapter authors need a path from Calibre to Zotero.
 
+**In review** (jmajerus/corpus-mcp#53): `cite_passage` warns and adds `printed_year` when Calibre's year differs from the printed one (`main:14`: 2014 against 2018). The records themselves still need a person (see Needs a person).
+
 ### 8. Reading a long PDF (corpus-mcp)
 
 *Zero Spaces* has no PDF outline, though its printed contents (file pages 5–7) were easy to read. At 40,000
@@ -126,6 +132,8 @@ characters per `read_book` call, reading the whole book costs about 16 calls and
 The session read Parts I and III, the play, and the chapters on collaborative art and sound, and only sampled
 Part II; the review says so in a scope note. An outline built from the printed contents, or a skim mode
 (headings and first sentences by page range), would help.
+
+**Fix in review** (jmajerus/corpus-mcp#53): with no PDF outline, `get_book_outline` gives `printed_contents`, each entry with the file page its heading starts on. `read_book` has a `skim: true` option (headings and first sentences), which used about a third of the characters on a sample range.
 
 ### 9. Getting a draft to the renderer (iasp-mcp)
 
@@ -144,6 +152,8 @@ calls (20,000–40,000 characters); whether they were the cause is not known. Wo
 for that minute. A short retry inside `add_quote` would have hidden it.
 
 **In review** (jmajerus/quote-mcp#34): `add_quote` retries corpus-mcp's verify once after 3 s when corpus-mcp is unreachable or times out. An error answer isn't retried. The outage itself is still unexplained.
+
+**Logging in review** (jmajerus/corpus-mcp#53). Cause not confirmed: no restart since 11-18, but the disk I/O-pressure counter shows a full stall about 13% of the time since boot, and every request, `/health` included, runs on one thread with synchronous SQLite, so a disk stall would freeze everything. The PR logs any tool call over 5 s and any event-loop hold over 5 s. To check that minute: `journalctl -u corpus-mcp -u corpus-refresh --since "2026-11-22 14:25" --until "2026-11-22 14:40"` (needs sudo).
 
 ### 11. A book-review skill (authoring-skills)
 
