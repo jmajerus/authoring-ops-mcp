@@ -16,19 +16,19 @@ of the friction came from source text and metadata, and from places where the to
 
 | # | Finding | Owner | Status |
 |---|---|---|---|
-| 1 | PDF text drops ligatures ("Te" for "The"; also fi, ft), so exact matching rejects correct quotes | corpus-mcp | fix in review (corpus-mcp#53, quote-mcp#35) |
-| 2 | A PDF with no page labels gets `page_label` = file position; *Zero Spaces* prints one lower | corpus-mcp | fix in review (corpus-mcp#53, quote-mcp#35); then a pin |
+| 1 | PDF text drops ligatures ("Te" for "The"; also fi, ft), so exact matching rejects correct quotes | corpus-mcp | fixed (corpus-mcp#53, quote-mcp#35, deployed) |
+| 2 | A PDF with no page labels gets `page_label` = file position; *Zero Spaces* prints one lower | corpus-mcp | fixed (corpus-mcp#53, quote-mcp#35, deployed; `main:14` pinned) |
 | 3 | The skill allows partial quotes as a warning; `validate_markdown` errors on partial run-in quotes | iasp-mcp + authoring-skills | fixed (iasp-mcp#2, deployed) |
 | 4 | Two quote markers before one paragraph (first draft only): the first is checked against an empty passage | iasp-mcp + authoring-skills | fixed (iasp-mcp#2, deployed) |
-| 5 | Quotes saved before and after filing land on two works (`quote:762`, 765); `cite_quote` still warns "not filed" after the match | quote-mcp (holdings-mcp check) | fix in review (quote-mcp#34) |
+| 5 | Quotes saved before and after filing land on two works (`quote:762`, 765); `cite_quote` still warns "not filed" after the match | quote-mcp (holdings-mcp check) | fixed (quote-mcp#34, deployed; 762 folded into 765) |
 | 6 | Ghost render gives the note after a quoted paragraph that quote's `data-quote-*` attributes | iasp-mcp | fixed (iasp-mcp#2–#3, deployed) |
-| 7 | Wrong or thin Calibre metadata passes straight into the reference list | corpus-mcp + a person | year warning in review (corpus-mcp#53); records need a person |
-| 8 | A 255-page PDF with no outline is costly to read through `read_book` | corpus-mcp | fix in review (corpus-mcp#53) |
+| 7 | Wrong or thin Calibre metadata passes straight into the reference list | corpus-mcp + a person | year warning deployed (corpus-mcp#53); records partly corrected |
+| 8 | A 255-page PDF with no outline is costly to read through `read_book` | corpus-mcp | fixed (corpus-mcp#53, deployed) |
 | 9 | Render takes only inline Markdown or a server path; output names can collide with the source | iasp-mcp | partly fixed (iasp-mcp#2, deployed); upload step open |
-| 10 | corpus-mcp stopped answering `/health` for a few minutes mid-session | corpus-mcp | cause unconfirmed; logging (corpus-mcp#53) and add_quote retry (quote-mcp#34) in review |
-| 11 | No skill fits a book review | authoring-skills | skill in review (authoring-skills#3) |
+| 10 | corpus-mcp stopped answering `/health` for a few minutes mid-session | corpus-mcp | cause unconfirmed; logging (corpus-mcp#53) and add_quote retry (quote-mcp#34) deployed |
+| 11 | No skill fits a book review | authoring-skills | skill merged (authoring-skills#3); not yet tagged |
 | 12 | Gaps outside the suite: no fact-check helper, no Ghost publish step | suite (new) | idea |
-| 13 | Partial-sentence citations saved for the review appear on the public quotes page beside collected passages | quote-mcp + authoring-skills | in review (authoring-skills#3, quote-mcp#34) |
+| 13 | Partial-sentence citations saved for the review appear on the public quotes page beside collected passages | quote-mcp + authoring-skills | fixed (authoring-skills#3, quote-mcp#34, deployed) |
 
 ### 1. Dropped ligatures in PDF text (corpus-mcp)
 
@@ -41,7 +41,7 @@ Possible fixes: repair the common dropped ligatures at index time; or match liga
 corrected reading with a flag; and report text quality in `get_book_outline` so the problem shows before
 quoting starts.
 
-**Fix in review** (jmajerus/corpus-mcp#53): `/api/verify` matches across lost Th, ft and fi/ff/fl letters. It returns the printed reading as `text`, with a `restored: { kind: "dropped-ligatures", … }` field, and keeps `anchor.text` as stored, so quote-mcp can save "This non-tangible …" unchanged. The restored reading also travels with the anchor (`anchor.reading`), so if the file or its extraction changes, the quote is found by its reading instead of being orphaned. A wrong restoration is fixed by a person on quote-mcp's admin quote page (going back to the stored wording is allowed), or by `propose_quote_fix` and a person accepting it. Tried on `main:14`, the refused quote now matches. `get_book_outline` has a `text_quality` section (for `main:14`: Th 668 damaged words / 32 intact, ft 89 / 0, 184 unreadable characters on file pages 3–4). On quote-mcp's side (jmajerus/quote-mcp#35, in review): `add_quote` keeps `restored` in the quote's origin, and an admin edit passes if it matches either the stored wording or the restored reading.
+**Fixed** (jmajerus/corpus-mcp#53, deployed): `/api/verify` matches across lost Th, ft and fi/ff/fl letters. It returns the printed reading as `text`, with a `restored: { kind: "dropped-ligatures", … }` field, and keeps `anchor.text` as stored, so quote-mcp can save "This non-tangible …" unchanged. The restored reading also travels with the anchor (`anchor.reading`), so if the file or its extraction changes, the quote is found by its reading instead of being orphaned. A wrong restoration is fixed by a person on quote-mcp's admin quote page (going back to the stored wording is allowed), or by `propose_quote_fix` and a person accepting it. Tried on `main:14`, the refused quote now matches. `get_book_outline` has a `text_quality` section (for `main:14`: Th 668 damaged words / 32 intact, ft 89 / 0, 184 unreadable characters on file pages 3–4). On quote-mcp's side (jmajerus/quote-mcp#35, deployed): `add_quote` keeps `restored` in the quote's origin, and an admin edit passes if it matches either the stored wording or the restored reading.
 
 ### 2. PDF page labels off by one (corpus-mcp)
 
@@ -58,7 +58,7 @@ The renders carry the stored locator too. In the HTML and Ghost files, each quot
 page (16). Anything that reads those attributes as provenance is sent one page high. Once quotes 875–887 and
 891–892 have the right printed pages, the review should be rendered again.
 
-**Fix in review** (jmajerus/corpus-mcp#53): `get_book_outline` has a `page_labels` section that says where labels come from and infers the printed numbering from the contents and surviving folios. For `main:14`: offset +1, 65 of 71 contents entries and 14 of 14 folios agree, none against. A new `pin_page_labels` tool stores a pin, and the ten-minute refresh relabels the index and quote-mcp's anchors (as `reanchored` changes). After deploy, check one page with `render_page`, then pin `main:14` file page 2 = "1". On quote-mcp's side (jmajerus/quote-mcp#35, in review): when a reanchor changes the printed page, `followAnchors` moves the quote's locator to it and records a `locator` history entry. It does this only when the locator is still the page the old anchor gave, so a page a person set is left alone. With #53 deployed and the pin made, the next import should give 875–892 their printed pages in `cite_quote` and the renders.
+**Fixed** (jmajerus/corpus-mcp#53, deployed): `get_book_outline` has a `page_labels` section that says where labels come from and infers the printed numbering from the contents and surviving folios. For `main:14`: offset +1, 65 of 71 contents entries and 14 of 14 folios agree, none against. A new `pin_page_labels` tool stores a pin, and the ten-minute refresh relabels the index and quote-mcp's anchors (as `reanchored` changes). After deploy, check one page with `render_page`, then pin `main:14` file page 2 = "1". On quote-mcp's side (jmajerus/quote-mcp#35, deployed): when a reanchor changes the printed page, `followAnchors` moves the quote's locator to it and records a `locator` history entry. It does this only when the locator is still the page the old anchor gave, so a page a person set is left alone. With #53 deployed and the pin made, the next import should give 875–892 their printed pages in `cite_quote` and the renders.
 
 ### 3. Partial quotes: skill and validator disagree (iasp-mcp, authoring-skills)
 
@@ -97,7 +97,7 @@ yet" after `pin_citekey` returned `matched`. The same likely holds for Lederach 
 When a pin matches a work, its earlier quotes should move to the matched work. holdings-mcp's
 `one-work-per-exact-key` check may already be flagging it.
 
-**Fix in review** (jmajerus/quote-mcp#34): once corpus-mcp ties a Zotero item to a Calibre book, the unmatched work for that book is folded into the item's work. This happens at the next `add_quote` for the book and at each import. Quotes keep their ids and get a `work_matched` history entry, and `quote:<old id>` still resolves. After deploy, the first import should fold 762 into 765 (and Lederach / Onlife if they split the same way), which clears `cite_quote`'s "not filed" warning and the `quote:762` provenance. Re-render the review after that. The same PR adds `chapter_author` to `add_quote`.
+**Fixed** (jmajerus/quote-mcp#34, deployed): once corpus-mcp ties a Zotero item to a Calibre book, the unmatched work for that book is folded into the item's work. This happens at the next `add_quote` for the book and at each import. Quotes keep their ids and get a `work_matched` history entry, and `quote:<old id>` still resolves. After deploy, the first import should fold 762 into 765 (and Lederach / Onlife if they split the same way), which clears `cite_quote`'s "not filed" warning and the `quote:762` provenance. Re-render the review after that. The same PR adds `chapter_author` to `add_quote`.
 
 ### 6. Marker attributes leak into the next block (iasp-mcp)
 
@@ -123,7 +123,7 @@ The skill says to file books as given, so these errors reach the reference list:
 `cite_passage` already offers a printed year when Calibre has none. It could also flag a Calibre year that
 disagrees with the book. Editors and chapter authors need a path from Calibre to Zotero.
 
-**In review** (jmajerus/corpus-mcp#53): `cite_passage` warns and adds `printed_year` when Calibre's year differs from the printed one (`main:14`: 2014 against 2018). The records themselves still need a person (see Needs a person).
+**Deployed** (jmajerus/corpus-mcp#53): `cite_passage` warns and adds `printed_year` when Calibre's year differs from the printed one (`main:14`: 2014 against 2018). The records themselves still need a person (see Needs a person).
 
 ### 8. Reading a long PDF (corpus-mcp)
 
@@ -133,7 +133,7 @@ The session read Parts I and III, the play, and the chapters on collaborative ar
 Part II; the review says so in a scope note. An outline built from the printed contents, or a skim mode
 (headings and first sentences by page range), would help.
 
-**Fix in review** (jmajerus/corpus-mcp#53): with no PDF outline, `get_book_outline` gives `printed_contents`, each entry with the file page its heading starts on. `read_book` has a `skim: true` option (headings and first sentences), which used about a third of the characters on a sample range.
+**Fixed** (jmajerus/corpus-mcp#53, deployed): with no PDF outline, `get_book_outline` gives `printed_contents`, each entry with the file page its heading starts on. `read_book` has a `skim: true` option (headings and first sentences), which used about a third of the characters on a sample range.
 
 ### 9. Getting a draft to the renderer (iasp-mcp)
 
@@ -151,9 +151,9 @@ At 14:31Z two `add_quote` calls failed with "corpus-mcp unreachable … timeout"
 calls (20,000–40,000 characters); whether they were the cause is not known. Worth checking corpus-mcp's logs
 for that minute. A short retry inside `add_quote` would have hidden it.
 
-**In review** (jmajerus/quote-mcp#34): `add_quote` retries corpus-mcp's verify once after 3 s when corpus-mcp is unreachable or times out. An error answer isn't retried. The outage itself is still unexplained.
+**Deployed** (jmajerus/quote-mcp#34): `add_quote` retries corpus-mcp's verify once after 3 s when corpus-mcp is unreachable or times out. An error answer isn't retried. The outage itself is still unexplained.
 
-**Logging in review** (jmajerus/corpus-mcp#53). Cause not confirmed: no restart since 11-18, but the disk I/O-pressure counter shows a full stall about 13% of the time since boot, and every request, `/health` included, runs on one thread with synchronous SQLite, so a disk stall would freeze everything. The PR logs any tool call over 5 s and any event-loop hold over 5 s. To check that minute: `journalctl -u corpus-mcp -u corpus-refresh --since "2026-11-22 14:25" --until "2026-11-22 14:40"` (needs sudo).
+**Logging deployed** (jmajerus/corpus-mcp#53). Cause not confirmed: no restart since 11-18, but the disk I/O-pressure counter shows a full stall about 13% of the time since boot, and every request, `/health` included, runs on one thread with synchronous SQLite, so a disk stall would freeze everything. The PR logs any tool call over 5 s and any event-loop hold over 5 s. To check that minute: `journalctl -u corpus-mcp -u corpus-refresh --since "2026-11-22 14:25" --until "2026-11-22 14:40"` (needs sudo).
 
 ### 11. A book-review skill (authoring-skills)
 
@@ -186,7 +186,7 @@ A sketch for authoring-skills:
 
 It would be served from here once authoring-skills is tagged and the ref in `suites/authoring.json` changes.
 
-**In review** (jmajerus/authoring-skills#3): a `book-review` skill following this sketch, with two departures. `add_quote` has no `chapter_author` field, and it fails with a printed `page_label` when the book has a page offset (finding 2). So the skill saves with `file_page`, cites the printed page in the draft, sends `propose_quote_fix` (page label or chapter author) for a person to accept, and lists the `quote-locator-differs` warnings that follow as expected. The skill now calls `propose_quote_fix`, so holdings-mcp's `TOOLS_SKILLS_USE` needs it too.
+**Merged** (jmajerus/authoring-skills#3; reaches the portal once tagged): a `book-review` skill following this sketch, with two departures. `add_quote` has no `chapter_author` field, and it fails with a printed `page_label` when the book has a page offset (finding 2). So the skill saves with `file_page`, cites the printed page in the draft, sends `propose_quote_fix` (page label or chapter author) for a person to accept, and lists the `quote-locator-differs` warnings that follow as expected. The skill now calls `propose_quote_fix`, and the PR adds it to `tools-used.json`, which authoring-ops-mcp checks on each poll.
 
 ### 12. Outside the suite
 
@@ -225,7 +225,7 @@ Proposed:
 This replaces the "save the full sentence and quote part of it" fix suggested during the session. Fixing
 findings 1 and 3 still matters: they are what pushed the session toward saving exact runs in the first place.
 
-**Skills side in review** (jmajerus/authoring-skills#3): portal-article and book-review say that saved quotes are citations, report them that way in the handover (ids and project tag), and propose none for the collection. quote-harvest is unchanged. The quote-mcp side is in review too (jmajerus/quote-mcp#34): until a person promotes it, the public page leaves out any agent-saved record (`generative: true`) and any partial sentence no person saved. Sentence bounds come from the book text around the quote, and the words' shape decides only where there is no book text. Promotion is a history entry made by the signed-in person, from the admin quote page or `quote-mcp promote <ids>`. No MCP tool can promote. `get_quote` returns the decision as `public`. Nothing is deleted. Two choices in it for the owner to confirm: every existing agent quote leaves the public page, not only the review's ten; and quotes a person saved are exempt from the partial-sentence rule.
+**Fixed** (jmajerus/authoring-skills#3, merged): portal-article and book-review say that saved quotes are citations, report them that way in the handover (ids and project tag), and propose none for the collection. quote-harvest is unchanged. The quote-mcp side is deployed too (jmajerus/quote-mcp#34): until a person promotes it, the public page leaves out any agent-saved record (`generative: true`) and any partial sentence no person saved. Sentence bounds come from the book text around the quote, and the words' shape decides only where there is no book text. Promotion is a history entry made by the signed-in person, from the admin quote page or `quote-mcp promote <ids>`. No MCP tool can promote. `get_quote` returns the decision as `public`. Nothing is deleted. Two choices in it for the owner to confirm: every existing agent quote leaves the public page, not only the review's ten; and quotes a person saved are exempt from the partial-sentence rule.
 
 ## What worked
 
@@ -241,15 +241,20 @@ findings 1 and 3 still matters: they are what pushed the session toward saving e
 - Filing then `pin_citekey` matched all three books by Calibre UUID, and the reference list built from Zotero.
 - `findings` named the corpus-mcp outage at once.
 
+## Re-render
+
+After every fix was deployed, `main:14` was pinned (file page 2 = printed "1") on 2026-11-22, and quote-mcp's
+import moved quotes 875–887 and 891–892 to work 765 with their printed pages. The review was then rendered
+again: all 18 quote markers match their saved text, citekey and page, with no warnings, and the bibliography
+comes entirely from Zotero. The Ghost scope note no longer carries `data-quote-*` attributes, every
+`data-quote-locator` gives the printed page, and no render mentions `quote:762`. The PDF is now in this
+directory.
+
 ## Needs a person
 
-- Zotero staging: give *Zero Spaces* (`W7SF3AIQ`) its date and publisher, and *The Onlife Manifesto*
-  (`RSQW6CWM`) Floridi as editor; then re-render the review.
-- Calibre: the same for `main:14` and `main:1160`, and the ISBN for `main:1396`.
-- Until finding 13 lands, the ten partial-sentence quotes (875, 876, 878, 883, 885, 886, 887, 890, 891, 892)
-  show on the public quotes page; hide them there if that shouldn't wait. Deleting them would break the
-  review's quote markers.
+- Zotero: *Zero Spaces* (`W7SF3AIQ`) now has 2014 and its ISBN but no publisher (Atropos Press), and *The
+  Onlife Manifesto* (`RSQW6CWM`) still has Floridi as author rather than editor. Re-render once they're set.
+- Zotero's citekey for *Zero Spaces* is now `collet2014zero`. The review and its quotes still use
+  `collet2018zero`, which resolves as a former key; switch the source to the new key if it should match.
 - Confirm the facts the review takes from general knowledge (listed in its disclosure note) before it is
   published.
-- Copy `zero-spaces-review.pdf` from `/var/lib/iasp-mcp/renders/zero-spaces-review/` on the iasp-mcp server into
-  this directory.
