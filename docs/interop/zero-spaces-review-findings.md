@@ -29,7 +29,7 @@ of the friction came from source text and metadata, and from places where the to
 | 11 | No skill fits a book review | authoring-skills | skill merged (authoring-skills#3); not yet tagged |
 | 12 | Gaps outside the suite: no fact-check helper, no Ghost publish step | suite (new) | idea |
 | 13 | Partial-sentence citations saved for the review appear on the public quotes page beside collected passages | quote-mcp + authoring-skills | fixed (authoring-skills#3, quote-mcp#34, deployed) |
-| 14 | A Zotero citekey rename (`collet2018zero` → `collet2014zero`) turns every citation of the old key into a `quote-citekey-differs` error | iasp-mcp | fix in review (iasp-mcp#4) |
+| 14 | A Zotero citekey rename (`collet2018zero` → `collet2014zero`) turns every citation of the old key into a `quote-citekey-differs` error | iasp-mcp | fixed (iasp-mcp#4, deployed) |
 
 ### 1. Dropped ligatures in PDF text (corpus-mcp)
 
@@ -238,7 +238,7 @@ but the validator reported 15 `quote-citekey-differs` errors for a source that v
 holdings-mcp lists the old key among the work's `other_citekeys`. A former key of the same work should be a
 warning that suggests the current key, not an error. The review now cites `collet2014zero`.
 
-**Fix in review** (jmajerus/iasp-mcp#4): when the cited key differs from the saved one, iasp-mcp asks holdings-mcp's `get_work` for both. If they resolve to the same work, it's a `quote-citekey-former` warning suggesting the current key, and locators are still compared. Different works, an ambiguous or unknown key, or holdings-mcp unreachable still give the error, saying why.
+**Fixed** (jmajerus/iasp-mcp#4, deployed): when the cited key differs from the saved one, iasp-mcp asks holdings-mcp's `get_work` for both. If they resolve to the same work, it's a `quote-citekey-former` warning suggesting the current key, and locators are still compared. Different works, an ambiguous or unknown key, or holdings-mcp unreachable still give the error, saying why.
 
 ## What worked
 
