@@ -18,13 +18,13 @@ of the friction came from source text and metadata, and from places where the to
 |---|---|---|---|
 | 1 | PDF text drops ligatures ("Te" for "The"; also fi, ft), so exact matching rejects correct quotes | corpus-mcp | fix in review (corpus-mcp#53, quote-mcp#35) |
 | 2 | A PDF with no page labels gets `page_label` = file position; *Zero Spaces* prints one lower | corpus-mcp | fix in review (corpus-mcp#53, quote-mcp#35); then a pin |
-| 3 | The skill allows partial quotes as a warning; `validate_markdown` errors on partial run-in quotes | iasp-mcp + authoring-skills | fixed in iasp-mcp#2 (merged, not deployed) |
-| 4 | Two quote markers before one paragraph (first draft only): the first is checked against an empty passage | iasp-mcp + authoring-skills | fixed in iasp-mcp#2 (merged, not deployed) |
+| 3 | The skill allows partial quotes as a warning; `validate_markdown` errors on partial run-in quotes | iasp-mcp + authoring-skills | fixed (iasp-mcp#2, deployed) |
+| 4 | Two quote markers before one paragraph (first draft only): the first is checked against an empty passage | iasp-mcp + authoring-skills | fixed (iasp-mcp#2, deployed) |
 | 5 | Quotes saved before and after filing land on two works (`quote:762`, 765); `cite_quote` still warns "not filed" after the match | quote-mcp (holdings-mcp check) | fix in review (quote-mcp#34) |
-| 6 | Ghost render gives the note after a quoted paragraph that quote's `data-quote-*` attributes | iasp-mcp | fixed in iasp-mcp#2 (merged, not deployed) |
+| 6 | Ghost render gives the note after a quoted paragraph that quote's `data-quote-*` attributes | iasp-mcp | fixed (iasp-mcp#2–#3, deployed) |
 | 7 | Wrong or thin Calibre metadata passes straight into the reference list | corpus-mcp + a person | year warning in review (corpus-mcp#53); records need a person |
 | 8 | A 255-page PDF with no outline is costly to read through `read_book` | corpus-mcp | fix in review (corpus-mcp#53) |
-| 9 | Render takes only inline Markdown or a server path; output names can collide with the source | iasp-mcp | fixed in iasp-mcp#2 (merged, not deployed) |
+| 9 | Render takes only inline Markdown or a server path; output names can collide with the source | iasp-mcp | partly fixed (iasp-mcp#2, deployed); upload step open |
 | 10 | corpus-mcp stopped answering `/health` for a few minutes mid-session | corpus-mcp | cause unconfirmed; logging (corpus-mcp#53) and add_quote retry (quote-mcp#34) in review |
 | 11 | No skill fits a book review | authoring-skills | skill in review (authoring-skills#3) |
 | 12 | Gaps outside the suite: no fact-check helper, no Ghost publish step | suite (new) | idea |
@@ -67,7 +67,7 @@ this run `validate_markdown` returned `quote-text-differs` errors for run-in par
 saved quote (ids 875, 886, 879). The fix was to quote each saved text whole. Either allow excerpts in run-ins
 with a warning, or have the skill say to save exactly the words that will be quoted.
 
-**Fixed** (jmajerus/iasp-mcp#2, merged; follow-up #3 open; not yet deployed): decided in the skill's favour. In a run-in paragraph, an unchanged quoted span of three words or more, or runs joined by ellipses, is a `quote-text-excerpt` warning, not an error. authoring-skills needs no change.
+**Fixed** (jmajerus/iasp-mcp#2 and #3, deployed): decided in the skill's favour. In a run-in paragraph, an unchanged quoted span of three words or more, or runs joined by ellipses, is a `quote-text-excerpt` warning, not an error. authoring-skills needs no change.
 
 ### 4. Stacked quote markers (iasp-mcp, authoring-skills)
 
@@ -86,7 +86,7 @@ and 892 took the paragraph. The committed source splits them into two paragraphs
 longer shows the problem. Either accept several ids in one
 marker (`<!-- quote 891 892 -->`) or say in the skill: one marker per paragraph.
 
-**Fixed** (jmajerus/iasp-mcp#2, merged; follow-up #3 open; not yet deployed): stacked markers are accepted, one per line before the passage. The validator checks each against the paragraph and matches it to the citation at that quote's stored locator, and Ghost and HTML nest one wrapper per marker. There is no `<!-- quote 891 892 -->` form.
+**Fixed** (jmajerus/iasp-mcp#2 and #3, deployed): stacked markers are accepted, one per line before the passage. The validator checks each against the paragraph and matches it to the citation at that quote's stored locator, and Ghost and HTML nest one wrapper per marker. There is no `<!-- quote 891 892 -->` form.
 
 ### 5. One book, two quote-store works (quote-mcp)
 
@@ -108,7 +108,7 @@ scope note to Collet's quotation. The HTML render's scope note is clean, so the 
 exporter. Marker state should reset after the block it marks. The committed Ghost file is kept as rendered,
 as the reproduction; render again once the fix lands.
 
-**Fixed** (jmajerus/iasp-mcp#2, merged; follow-up #3 open; not yet deployed): the block right after a marker consumes it. In Ghost, a run-in paragraph gets its own `iasp-quote` wrapper, as in HTML, and a heading, list or table ends the marker. The HTML filter had a related leak (a marker before a heading bound to the paragraph after it), also fixed. Re-render the Ghost file once #2 is merged and deployed.
+**Fixed** (jmajerus/iasp-mcp#2 and #3, deployed): the block right after a marker consumes it. In Ghost, a run-in paragraph gets its own `iasp-quote` wrapper, as in HTML, and a heading, list or table ends the marker. The HTML filter had a related leak (a marker before a heading bound to the paragraph after it), also fixed. The live `render_document` gives the scope note no `data-quote-*` attributes; the committed Ghost file is rendered again once findings 2 and 5 are deployed too.
 
 ### 7. Metadata passes through (corpus-mcp, a person)
 
@@ -142,7 +142,7 @@ saved the rendered `md` under the source's name and overwrote it (its own mistak
 rendering a draft stored server-side, would remove the pasting; a default `-rendered.md` name would prevent
 the collision.
 
-**Fixed** (jmajerus/iasp-mcp#2, merged; follow-up #3 open; not yet deployed): an output that would overwrite the source is written as `<name>-rendered.<ext>`, with a warning. The upload / server-side-draft idea is out of scope.
+**Fixed** (jmajerus/iasp-mcp#2 and #3, deployed): an output that would overwrite the source is written as `<name>-rendered.<ext>`, with a warning. The upload / server-side-draft idea is still open.
 
 ### 10. corpus-mcp outage (corpus-mcp)
 
