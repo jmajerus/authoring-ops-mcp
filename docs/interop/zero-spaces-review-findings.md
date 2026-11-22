@@ -186,7 +186,7 @@ A sketch for authoring-skills:
 
 It would be served from here once authoring-skills is tagged and the ref in `suites/authoring.json` changes.
 
-**Merged** (jmajerus/authoring-skills#3; reaches the portal once tagged): a `book-review` skill following this sketch, with two departures. `add_quote` has no `chapter_author` field, and it fails with a printed `page_label` when the book has a page offset (finding 2). So the skill saves with `file_page`, cites the printed page in the draft, sends `propose_quote_fix` (page label or chapter author) for a person to accept, and lists the `quote-locator-differs` warnings that follow as expected. The skill now calls `propose_quote_fix`, so holdings-mcp's `TOOLS_SKILLS_USE` needs it too.
+**Merged** (jmajerus/authoring-skills#3; reaches the portal once tagged): a `book-review` skill following this sketch, with two departures. `add_quote` has no `chapter_author` field, and it fails with a printed `page_label` when the book has a page offset (finding 2). So the skill saves with `file_page`, cites the printed page in the draft, sends `propose_quote_fix` (page label or chapter author) for a person to accept, and lists the `quote-locator-differs` warnings that follow as expected. The skill now calls `propose_quote_fix`, and the PR adds it to `tools-used.json`, which authoring-ops-mcp checks on each poll.
 
 ### 12. Outside the suite
 
