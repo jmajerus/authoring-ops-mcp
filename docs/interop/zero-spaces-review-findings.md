@@ -16,8 +16,8 @@ of the friction came from source text and metadata, and from places where the to
 
 | # | Finding | Owner | Status |
 |---|---|---|---|
-| 1 | PDF text drops ligatures ("Te" for "The"; also fi, ft), so exact matching rejects correct quotes | corpus-mcp | fix in review (corpus-mcp#53) |
-| 2 | A PDF with no page labels gets `page_label` = file position; *Zero Spaces* prints one lower | corpus-mcp | fix in review (corpus-mcp#53); then a pin and a quote-mcp locator update |
+| 1 | PDF text drops ligatures ("Te" for "The"; also fi, ft), so exact matching rejects correct quotes | corpus-mcp | fix in review (corpus-mcp#53, quote-mcp#35) |
+| 2 | A PDF with no page labels gets `page_label` = file position; *Zero Spaces* prints one lower | corpus-mcp | fix in review (corpus-mcp#53, quote-mcp#35); then a pin |
 | 3 | The skill allows partial quotes as a warning; `validate_markdown` errors on partial run-in quotes | iasp-mcp + authoring-skills | fixed in iasp-mcp#2 (merged, not deployed) |
 | 4 | Two quote markers before one paragraph (first draft only): the first is checked against an empty passage | iasp-mcp + authoring-skills | fixed in iasp-mcp#2 (merged, not deployed) |
 | 5 | Quotes saved before and after filing land on two works (`quote:762`, 765); `cite_quote` still warns "not filed" after the match | quote-mcp (holdings-mcp check) | fix in review (quote-mcp#34) |
@@ -41,7 +41,7 @@ Possible fixes: repair the common dropped ligatures at index time; or match liga
 corrected reading with a flag; and report text quality in `get_book_outline` so the problem shows before
 quoting starts.
 
-**Fix in review** (jmajerus/corpus-mcp#53): `/api/verify` matches across lost Th, ft and fi/ff/fl letters. It returns the printed reading as `text`, with a `restored: { kind: "dropped-ligatures", … }` field, and keeps `anchor.text` as stored, so quote-mcp can save "This non-tangible …" unchanged. Tried on `main:14`, the refused quote now matches. `get_book_outline` has a `text_quality` section (for `main:14`: Th 668 damaged words / 32 intact, ft 89 / 0, 184 unreadable characters on file pages 3–4). Open on quote-mcp's side: its edit check may reject a later edit to a quote saved with a restored reading.
+**Fix in review** (jmajerus/corpus-mcp#53): `/api/verify` matches across lost Th, ft and fi/ff/fl letters. It returns the printed reading as `text`, with a `restored: { kind: "dropped-ligatures", … }` field, and keeps `anchor.text` as stored, so quote-mcp can save "This non-tangible …" unchanged. Tried on `main:14`, the refused quote now matches. `get_book_outline` has a `text_quality` section (for `main:14`: Th 668 damaged words / 32 intact, ft 89 / 0, 184 unreadable characters on file pages 3–4). On quote-mcp's side (jmajerus/quote-mcp#35, in review): `add_quote` keeps `restored` in the quote's origin, and an admin edit passes if it matches either the stored wording or the restored reading.
 
 ### 2. PDF page labels off by one (corpus-mcp)
 
@@ -58,7 +58,7 @@ The renders carry the stored locator too. In the HTML and Ghost files, each quot
 page (16). Anything that reads those attributes as provenance is sent one page high. Once quotes 875–887 and
 891–892 have the right printed pages, the review should be rendered again.
 
-**Fix in review** (jmajerus/corpus-mcp#53): `get_book_outline` has a `page_labels` section that says where labels come from and infers the printed numbering from the contents and surviving folios. For `main:14`: offset +1, 65 of 71 contents entries and 14 of 14 folios agree, none against. A new `pin_page_labels` tool stores a pin, and the ten-minute refresh relabels the index and quote-mcp's anchors (as `reanchored` changes). After deploy, check one page with `render_page`, then pin `main:14` file page 2 = "1". Open on quote-mcp's side: `followAnchors` doesn't yet update a quote's stored locator, so `cite_quote` and the renders keep the old pages until it does (or the quotes get `update_quote`).
+**Fix in review** (jmajerus/corpus-mcp#53): `get_book_outline` has a `page_labels` section that says where labels come from and infers the printed numbering from the contents and surviving folios. For `main:14`: offset +1, 65 of 71 contents entries and 14 of 14 folios agree, none against. A new `pin_page_labels` tool stores a pin, and the ten-minute refresh relabels the index and quote-mcp's anchors (as `reanchored` changes). After deploy, check one page with `render_page`, then pin `main:14` file page 2 = "1". On quote-mcp's side (jmajerus/quote-mcp#35, in review): when a reanchor changes the printed page, `followAnchors` moves the quote's locator to it and records a `locator` history entry. It does this only when the locator is still the page the old anchor gave, so a page a person set is left alone. With #53 deployed and the pin made, the next import should give 875–892 their printed pages in `cite_quote` and the renders.
 
 ### 3. Partial quotes: skill and validator disagree (iasp-mcp, authoring-skills)
 
