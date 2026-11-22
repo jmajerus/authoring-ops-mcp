@@ -19,9 +19,9 @@ of the friction came from source text and metadata, and from places where the to
 | 1 | PDF text drops ligatures ("Te" for "The"; also fi, ft), so exact matching rejects correct quotes | corpus-mcp | open |
 | 2 | A PDF with no page labels gets `page_label` = file position; *Zero Spaces* prints one lower | corpus-mcp | open |
 | 3 | The skill allows partial quotes as a warning; `validate_markdown` errors on partial run-in quotes | iasp-mcp + authoring-skills | open |
-| 4 | Two quote markers before one paragraph: the first is checked against an empty passage | iasp-mcp + authoring-skills | open |
+| 4 | Two quote markers before one paragraph (first draft only): the first is checked against an empty passage | iasp-mcp + authoring-skills | open |
 | 5 | Quotes saved before and after filing land on two works (`quote:762`, 765); `cite_quote` still warns "not filed" after the match | quote-mcp (holdings-mcp check) | open |
-| 6 | Ghost/HTML render gives the note after a quoted paragraph that quote's `data-quote-*` attributes | iasp-mcp | open |
+| 6 | Ghost render gives the note after a quoted paragraph that quote's `data-quote-*` attributes | iasp-mcp | open |
 | 7 | Wrong or thin Calibre metadata passes straight into the reference list | corpus-mcp + a person | open |
 | 8 | A 255-page PDF with no outline is costly to read through `read_book` | corpus-mcp | open |
 | 9 | Render takes only inline Markdown or a server path; output names can collide with the source | iasp-mcp | open |
@@ -51,6 +51,11 @@ ones.
 Possible fixes: a per-book page offset a person can pin, like `pin_citekey`; or infer the offset from numbers
 printed on chapter-opening pages and the printed contents.
 
+The renders carry the stored locator too. In the HTML and Ghost files, each quote's machine-readable
+`data-quote-locator` gives the file page (quote 875: `p. 17`) while the visible citation gives the printed
+page (16). Anything that reads those attributes as provenance is sent one page high. Once quotes 875–887 and
+891–892 have the right printed pages, the review should be rendered again.
+
 ### 3. Partial quotes: skill and validator disagree (iasp-mcp, authoring-skills)
 
 portal-article step 7 says `text: "excerpt"` is a warning when the draft quotes a run of the saved words. In
@@ -60,8 +65,19 @@ with a warning, or have the skill say to save exactly the words that will be quo
 
 ### 4. Stacked quote markers (iasp-mcp, authoring-skills)
 
-`<!-- quote 891 -->` and `<!-- quote 892 -->` on consecutive lines before one paragraph: 891 was checked
-against nothing and reported "no citation", and 892 took the paragraph. Either accept several ids in one
+In the first draft sent to `validate_markdown`, `<!-- quote 891 -->` and `<!-- quote 892 -->` sat on
+consecutive lines before one paragraph that quoted both:
+
+```
+<!-- quote 891 -->
+<!-- quote 892 -->
+The results are … "are said to date back to around 4500 B.C.E." [@collet2018zero, p. 102] … Dante appears
+as "having become literally blind" [@collet2018zero, p. 113] …
+```
+
+891 was checked against nothing (`quote-text-differs` with an empty draft passage, and `quote-citation-missing`),
+and 892 took the paragraph. The committed source splits them into two paragraphs, one marker each, so it no
+longer shows the problem. Either accept several ids in one
 marker (`<!-- quote 891 892 -->`) or say in the skill: one marker per paragraph.
 
 ### 5. One book, two quote-store works (quote-mcp)
@@ -75,9 +91,12 @@ When a pin matches a work, its earlier quotes should move to the matched work. h
 
 ### 6. Marker attributes leak into the next block (iasp-mcp)
 
-In the Ghost and HTML renders, the `.note .scope` div after the last quoted paragraph carries
-`data-quote-id="884" data-citekey="collet2018zero" data-work-key="quote:762" data-quote-locator="p. 242"`.
-Marker state should reset after the block it marks.
+In the Ghost render, the `.note .scope` div after the last quoted paragraph carries
+`data-quote-id="884" data-citekey="collet2018zero" data-work-key="quote:762" data-quote-locator="p. 242"`
+(`zero-spaces-review.ghost.md`, line 103). A consumer that reads these attributes as provenance would tie the
+scope note to Collet's quotation. The HTML render's scope note is clean, so the leak is in the Ghost
+exporter. Marker state should reset after the block it marks. The committed Ghost file is kept as rendered,
+as the reproduction; render again once the fix lands.
 
 ### 7. Metadata passes through (corpus-mcp, a person)
 
