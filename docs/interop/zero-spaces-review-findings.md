@@ -20,15 +20,15 @@ of the friction came from source text and metadata, and from places where the to
 | 2 | A PDF with no page labels gets `page_label` = file position; *Zero Spaces* prints one lower | corpus-mcp | open |
 | 3 | The skill allows partial quotes as a warning; `validate_markdown` errors on partial run-in quotes | iasp-mcp + authoring-skills | fixed in iasp-mcp#2 (merged, not deployed) |
 | 4 | Two quote markers before one paragraph (first draft only): the first is checked against an empty passage | iasp-mcp + authoring-skills | fixed in iasp-mcp#2 (merged, not deployed) |
-| 5 | Quotes saved before and after filing land on two works (`quote:762`, 765); `cite_quote` still warns "not filed" after the match | quote-mcp (holdings-mcp check) | open |
+| 5 | Quotes saved before and after filing land on two works (`quote:762`, 765); `cite_quote` still warns "not filed" after the match | quote-mcp (holdings-mcp check) | fix in review (quote-mcp#34) |
 | 6 | Ghost render gives the note after a quoted paragraph that quote's `data-quote-*` attributes | iasp-mcp | fixed in iasp-mcp#2 (merged, not deployed) |
 | 7 | Wrong or thin Calibre metadata passes straight into the reference list | corpus-mcp + a person | open |
 | 8 | A 255-page PDF with no outline is costly to read through `read_book` | corpus-mcp | open |
 | 9 | Render takes only inline Markdown or a server path; output names can collide with the source | iasp-mcp | fixed in iasp-mcp#2 (merged, not deployed) |
-| 10 | corpus-mcp stopped answering `/health` for a few minutes mid-session | corpus-mcp | observed |
+| 10 | corpus-mcp stopped answering `/health` for a few minutes mid-session | corpus-mcp | observed; add_quote retry in review (quote-mcp#34) |
 | 11 | No skill fits a book review | authoring-skills | skill in review (authoring-skills#3) |
 | 12 | Gaps outside the suite: no fact-check helper, no Ghost publish step | suite (new) | idea |
-| 13 | Partial-sentence citations saved for the review appear on the public quotes page beside collected passages | quote-mcp + authoring-skills | skills side in review (authoring-skills#3); quote-mcp open |
+| 13 | Partial-sentence citations saved for the review appear on the public quotes page beside collected passages | quote-mcp + authoring-skills | in review (authoring-skills#3, quote-mcp#34) |
 
 ### 1. Dropped ligatures in PDF text (corpus-mcp)
 
@@ -93,6 +93,8 @@ yet" after `pin_citekey` returned `matched`. The same likely holds for Lederach 
 When a pin matches a work, its earlier quotes should move to the matched work. holdings-mcp's
 `one-work-per-exact-key` check may already be flagging it.
 
+**Fix in review** (jmajerus/quote-mcp#34): once corpus-mcp ties a Zotero item to a Calibre book, the unmatched work for that book is folded into the item's work. This happens at the next `add_quote` for the book and at each import. Quotes keep their ids and get a `work_matched` history entry, and `quote:<old id>` still resolves. After deploy, the first import should fold 762 into 765 (and Lederach / Onlife if they split the same way), which clears `cite_quote`'s "not filed" warning and the `quote:762` provenance. Re-render the review after that. The same PR adds `chapter_author` to `add_quote`.
+
 ### 6. Marker attributes leak into the next block (iasp-mcp)
 
 In the Ghost render, the `.note .scope` div after the last quoted paragraph carries
@@ -140,6 +142,8 @@ At 14:31Z two `add_quote` calls failed with "corpus-mcp unreachable … timeout"
 `down:corpus-mcp`. A search a minute later succeeded. The session had just made several large `read_book`
 calls (20,000–40,000 characters); whether they were the cause is not known. Worth checking corpus-mcp's logs
 for that minute. A short retry inside `add_quote` would have hidden it.
+
+**In review** (jmajerus/quote-mcp#34): `add_quote` retries corpus-mcp's verify once after 3 s when corpus-mcp is unreachable or times out. An error answer isn't retried. The outage itself is still unexplained.
 
 ### 11. A book-review skill (authoring-skills)
 
@@ -211,7 +215,7 @@ Proposed:
 This replaces the "save the full sentence and quote part of it" fix suggested during the session. Fixing
 findings 1 and 3 still matters: they are what pushed the session toward saving exact runs in the first place.
 
-**Skills side in review** (jmajerus/authoring-skills#3): portal-article and book-review say that saved quotes are citations, report them that way in the handover (ids and project tag), and propose none for the collection. quote-harvest is unchanged. The quote-mcp side is open.
+**Skills side in review** (jmajerus/authoring-skills#3): portal-article and book-review say that saved quotes are citations, report them that way in the handover (ids and project tag), and propose none for the collection. quote-harvest is unchanged. The quote-mcp side is in review too (jmajerus/quote-mcp#34): until a person promotes it, the public page leaves out any agent-saved record (`generative: true`) and any partial sentence no person saved. Sentence bounds come from the book text around the quote, and the words' shape decides only where there is no book text. Promotion is a history entry made by the signed-in person, from the admin quote page or `quote-mcp promote <ids>`. No MCP tool can promote. `get_quote` returns the decision as `public`. Nothing is deleted. Two choices in it for the owner to confirm: every existing agent quote leaves the public page, not only the review's ten; and quotes a person saved are exempt from the partial-sentence rule.
 
 ## What worked
 
