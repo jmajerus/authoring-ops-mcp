@@ -26,9 +26,9 @@ of the friction came from source text and metadata, and from places where the to
 | 8 | A 255-page PDF with no outline is costly to read through `read_book` | corpus-mcp | open |
 | 9 | Render takes only inline Markdown or a server path; output names can collide with the source | iasp-mcp | fix in review (iasp-mcp#2) |
 | 10 | corpus-mcp stopped answering `/health` for a few minutes mid-session | corpus-mcp | observed |
-| 11 | No skill fits a book review | authoring-skills | proposed (sketch below) |
+| 11 | No skill fits a book review | authoring-skills | skill in review (authoring-skills#3) |
 | 12 | Gaps outside the suite: no fact-check helper, no Ghost publish step | suite (new) | idea |
-| 13 | Partial-sentence citations saved for the review appear on the public quotes page beside collected passages | quote-mcp + authoring-skills | open |
+| 13 | Partial-sentence citations saved for the review appear on the public quotes page beside collected passages | quote-mcp + authoring-skills | skills side in review (authoring-skills#3); quote-mcp open |
 
 ### 1. Dropped ligatures in PDF text (corpus-mcp)
 
@@ -172,6 +172,8 @@ A sketch for authoring-skills:
 
 It would be served from here once authoring-skills is tagged and the ref in `suites/authoring.json` changes.
 
+**In review** (jmajerus/authoring-skills#3): a `book-review` skill following this sketch, with two departures. `add_quote` has no `chapter_author` field, and it fails with a printed `page_label` when the book has a page offset (finding 2). So the skill saves with `file_page`, cites the printed page in the draft, sends `propose_quote_fix` (page label or chapter author) for a person to accept, and lists the `quote-locator-differs` warnings that follow as expected. The skill now calls `propose_quote_fix`, so holdings-mcp's `TOOLS_SKILLS_USE` needs it too.
+
 ### 12. Outside the suite
 
 - No way to verify general-knowledge facts. A web search didn't confirm the source of the Deleuze epigraph,
@@ -208,6 +210,8 @@ Proposed:
 
 This replaces the "save the full sentence and quote part of it" fix suggested during the session. Fixing
 findings 1 and 3 still matters: they are what pushed the session toward saving exact runs in the first place.
+
+**Skills side in review** (jmajerus/authoring-skills#3): portal-article and book-review say that saved quotes are citations, report them that way in the handover (ids and project tag), and propose none for the collection. quote-harvest is unchanged. The quote-mcp side is open.
 
 ## What worked
 
