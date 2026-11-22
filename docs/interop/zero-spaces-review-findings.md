@@ -22,13 +22,14 @@ of the friction came from source text and metadata, and from places where the to
 | 4 | Two quote markers before one paragraph (first draft only): the first is checked against an empty passage | iasp-mcp + authoring-skills | fixed (iasp-mcp#2, deployed) |
 | 5 | Quotes saved before and after filing land on two works (`quote:762`, 765); `cite_quote` still warns "not filed" after the match | quote-mcp (holdings-mcp check) | fixed (quote-mcp#34, deployed; 762 folded into 765) |
 | 6 | Ghost render gives the note after a quoted paragraph that quote's `data-quote-*` attributes | iasp-mcp | fixed (iasp-mcp#2–#3, deployed) |
-| 7 | Wrong or thin Calibre metadata passes straight into the reference list | corpus-mcp + a person | year warning deployed (corpus-mcp#53); records partly corrected |
+| 7 | Wrong or thin Calibre metadata passes straight into the reference list | corpus-mcp + a person | year warning deployed (corpus-mcp#53); Zotero and Calibre records corrected |
 | 8 | A 255-page PDF with no outline is costly to read through `read_book` | corpus-mcp | fixed (corpus-mcp#53, deployed) |
 | 9 | Render takes only inline Markdown or a server path; output names can collide with the source | iasp-mcp | partly fixed (iasp-mcp#2, deployed); upload step open |
-| 10 | corpus-mcp stopped answering `/health` for a few minutes mid-session | corpus-mcp | cause unconfirmed; logging (corpus-mcp#53) and add_quote retry (quote-mcp#34) deployed |
+| 10 | corpus-mcp stopped answering `/health` for a few minutes mid-session | corpus-mcp | blocked, not down (journal); logging (corpus-mcp#53) and add_quote retry (quote-mcp#34) deployed |
 | 11 | No skill fits a book review | authoring-skills | skill merged (authoring-skills#3); not yet tagged |
 | 12 | Gaps outside the suite: no fact-check helper, no Ghost publish step | suite (new) | idea |
 | 13 | Partial-sentence citations saved for the review appear on the public quotes page beside collected passages | quote-mcp + authoring-skills | fixed (authoring-skills#3, quote-mcp#34, deployed) |
+| 14 | A Zotero citekey rename (`collet2018zero` → `collet2014zero`) turns every citation of the old key into a `quote-citekey-differs` error | iasp-mcp | fixed (iasp-mcp#4, deployed) |
 
 ### 1. Dropped ligatures in PDF text (corpus-mcp)
 
@@ -155,6 +156,8 @@ for that minute. A short retry inside `add_quote` would have hidden it.
 
 **Logging deployed** (jmajerus/corpus-mcp#53). Cause not confirmed: no restart since 11-18, but the disk I/O-pressure counter shows a full stall about 13% of the time since boot, and every request, `/health` included, runs on one thread with synchronous SQLite, so a disk stall would freeze everything. The PR logs any tool call over 5 s and any event-loop hold over 5 s. To check that minute: `journalctl -u corpus-mcp -u corpus-refresh --since "2026-11-22 14:25" --until "2026-11-22 14:40"` (needs sudo).
 
+**Journal** (corpus-mcp and corpus-refresh, 14:25–14:40, server time read as UTC): there was no restart of the node process and no error from it, so corpus-mcp was blocked, not down. `corpus-refresh` ran 14:32:02–14:32:06, after the 14:31 failures, so it didn't start the stall. The one other line, at 14:33:46, is unrelated: `linked site not refreshed: https://quotes.majerus.us: site.json: HTTP 404`. quote-mcp's public site has never served `/site.json` or its citekey list (the convention is in quote-mcp's PLAN.md), so the library's book pages have never linked to the quotes site. Fix in review (jmajerus/quote-mcp#36): `/site.json` and `/api/public/citekeys` from the public snapshot, so a work with nothing public isn't listed. corpus-mcp needs no change and picks up the links on its next publish after quote-mcp's. The over-5 s logging should name the cause next time.
+
 ### 11. A book-review skill (authoring-skills)
 
 portal-article is built for an essay: a topic the library can carry, 900–1,200 words, one footnote per quote,
@@ -227,6 +230,16 @@ findings 1 and 3 still matters: they are what pushed the session toward saving e
 
 **Fixed** (jmajerus/authoring-skills#3, merged): portal-article and book-review say that saved quotes are citations, report them that way in the handover (ids and project tag), and propose none for the collection. quote-harvest is unchanged. The quote-mcp side is deployed too (jmajerus/quote-mcp#34): until a person promotes it, the public page leaves out any agent-saved record (`generative: true`) and any partial sentence no person saved. Sentence bounds come from the book text around the quote, and the words' shape decides only where there is no book text. Promotion is a history entry made by the signed-in person, from the admin quote page or `quote-mcp promote <ids>`. No MCP tool can promote. `get_quote` returns the decision as `public`. Nothing is deleted. Two choices in it for the owner to confirm: every existing agent quote leaves the public page, not only the review's ten; and quotes a person saved are exempt from the partial-sentence rule.
 
+### 14. A citekey rename breaks the source (iasp-mcp)
+
+Correcting *Zero Spaces*' date in Zotero made Better BibTeX rename its key from `collet2018zero` to
+`collet2014zero`. quote-mcp now gives the new key, and the render's bibliography still resolved the old one,
+but the validator reported 15 `quote-citekey-differs` errors for a source that validated an hour earlier.
+holdings-mcp lists the old key among the work's `other_citekeys`. A former key of the same work should be a
+warning that suggests the current key, not an error. The review now cites `collet2014zero`.
+
+**Fixed** (jmajerus/iasp-mcp#4, deployed): when the cited key differs from the saved one, iasp-mcp asks holdings-mcp's `get_work` for both. If they resolve to the same work, it's a `quote-citekey-former` warning suggesting the current key, and locators are still compared. Different works, an ambiguous or unknown key, or holdings-mcp unreachable still give the error, saying why.
+
 ## What worked
 
 - `find_work` gave the book's form, the next tools, and why it couldn't be cited yet, in one call.
@@ -250,11 +263,11 @@ comes entirely from Zotero. The Ghost scope note no longer carries `data-quote-*
 `data-quote-locator` gives the printed page, and no render mentions `quote:762`. The PDF is now in this
 directory.
 
+After the Zotero records were corrected, the review was rendered once more, now citing `collet2014zero`
+(finding 14). The reference list gives *Zero Spaces* as New York: Atropos Press, 2014, and Floridi as editor
+of *The Onlife Manifesto*.
+
 ## Needs a person
 
-- Zotero: *Zero Spaces* (`W7SF3AIQ`) now has 2014 and its ISBN but no publisher (Atropos Press), and *The
-  Onlife Manifesto* (`RSQW6CWM`) still has Floridi as author rather than editor. Re-render once they're set.
-- Zotero's citekey for *Zero Spaces* is now `collet2014zero`. The review and its quotes still use
-  `collet2018zero`, which resolves as a former key; switch the source to the new key if it should match.
 - Confirm the facts the review takes from general knowledge (listed in its disclosure note) before it is
   published.

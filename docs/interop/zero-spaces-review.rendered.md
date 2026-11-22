@@ -115,9 +115,9 @@ By Collet's own account, the zero space has to be followed by a return to reason
 
 ## References
 
-Collet, Gabrielle. 2014. *Zero Spaces*.
+Collet, Gabrielle. 2014. *Zero Spaces*. New York: Atropos Press.
 
-Floridi, Luciano. 2015. *The Onlife Manifesto*. Springer International Publishing.
+Floridi, Luciano, ed. 2015. *The Onlife Manifesto*. Springer International Publishing.
 
 Lederach, John Paul. 2005. *The Moral Imagination*. Oxford University Press.
 
