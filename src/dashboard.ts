@@ -74,10 +74,10 @@ export function ownerOf(f: Finding, services: ServiceState[]): string | undefine
 const attention = (n: number) => pill("stale", `${n} need${n === 1 ? "s" : ""} attention`);
 
 function servicesTable(s: Snapshot, now: number, admin: boolean, lan: boolean): string {
-  const counts = new Map<string, number>();
+  const owned = new Map<string, Finding[]>();
   for (const f of s.findings) {
     const owner = ownerOf(f, s.services);
-    if (owner) counts.set(owner, (counts.get(owner) ?? 0) + 1);
+    if (owner) owned.set(owner, [...(owned.get(owner) ?? []), f]);
   }
   const rows = s.services.map((v) => {
     const d = v.health?.deployed;
@@ -93,9 +93,16 @@ function servicesTable(s: Snapshot, now: number, admin: boolean, lan: boolean): 
     const repo = admin && v.repo ? `https://github.com/${v.repo}` : undefined;
     const commit = d?.commit ? link(repo && `${repo}/commit/${d.commit}`, d.commit.slice(0, 7)) : "";
     const name = admin ? link(repo, v.name) : v.public ? link(v.public, v.name) : `<a href="${esc(servicePath(v.name))}">${esc(v.name)}</a>`;
-    // The count for anyone; on the LAN, what they are beside where they're fixed.
-    const n = counts.get(v.name) ?? 0;
-    const needs = n ? [attention(n), ...(admin || lan ? [`<a href="${esc(servicePath(v.name))}#attention">details</a>`, v.admin ? link(v.admin, "fix") : ""] : [])].filter(Boolean).join(" ") : "";
+    // The count for anyone. On the LAN it opens the page that lists them: the worklist that keeps a check's
+    // findings, or the service's admin page; findings bound for different pages get a count each.
+    const mine = owned.get(v.name) ?? [];
+    let needs = "";
+    if (mine.length && !(admin || lan)) needs = attention(mine.length);
+    else if (mine.length) {
+      const to = new Map<string, number>();
+      for (const f of mine) { const href = f.link ?? v.admin ?? ""; to.set(href, (to.get(href) ?? 0) + 1); }
+      needs = [...to].map(([href, n]) => (/^https?:\/\//.test(href) ? `<a href="${esc(href)}">${attention(n)}</a>` : attention(n))).join(" ");
+    }
     return `<tr><td>${name}</td><td>${pill(v.up ? "up" : "down", v.up ? "up" : "down")} <span class="s">${time(v.since, now)}</span></td>
 <td>${esc(v.health?.version ?? v.tools?.version)}</td><td><code>${commit}</code></td><td>${time(d?.at, now)}</td>
 <td class="n">${v.tools ? v.tools.names.length : ""}</td><td>${needs}</td><td class="w">${notes}</td>${admin ? `<td>${v.admin ? link(v.admin, "admin") : ""}</td>` : ""}</tr>`;

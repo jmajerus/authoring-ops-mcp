@@ -6,7 +6,7 @@ The front door to the authoring suite behind the Authoring Portal (`suite_` ther
   `find_work` for anything the owner has). The portal shows them ahead of every other server's.
 - **Health.** It polls every service each minute and answers whether the suite is working. Each finding says
   how bad it is and who owns the fix. A page at `/` shows anyone how many need attention in each service; on
-  the LAN each count links to the findings and to the page where they're fixed, and `/admin` adds the errors.
+  the LAN each count opens the page that lists those findings, and `/admin` adds the errors.
 - **Skills.** It serves the [authoring skills](https://github.com/jmajerus/authoring-skills) to sessions that
   have none installed, and checks that every tool the skills call is still listed by its service.
 

@@ -390,7 +390,7 @@ describe("the server", () => {
       // Counts by the service that owns the fix, and nothing to click through to.
       expect(open).toContain("2 need attention");
       expect(open).toContain("1 needs attention");
-      for (const hidden of ["ECONNREFUSED", "10.0.0.9", "localdomain", "http://h/worklist", "/admin", "/api/status", "Poll now", "github.com", "#attention", ">fix<"]) expect(open).not.toContain(hidden);
+      for (const hidden of ["ECONNREFUSED", "10.0.0.9", "localdomain", "http://h/worklist", "/admin", "/api/status", "Poll now", "github.com", `href="http://h/worklist"`]) expect(open).not.toContain(hidden);
       // The service's own page names them, but keeps the detail and links for the LAN.
       const page = await (await fetch(`${base}/services/a-mcp`, { headers: { "cf-ray": "x" } })).text();
       expect(page).toContain("A is blocked on the terminology.");
@@ -399,7 +399,8 @@ describe("the server", () => {
       const lanPage = await (await fetch(`${base}/services/a-mcp`)).text();
       for (const shown of ["10.0.0.9", `<a href="http://h/worklist">details</a>`, `<a href="http://a.localdomain/admin">a-mcp admin</a>`]) expect(lanPage).toContain(shown);
       const lanHome = await (await fetch(`${base}/`)).text();
-      expect(lanHome).toContain(`<a href="/services/a-mcp#attention">details</a> <a href="http://a.localdomain/admin">fix</a>`);
+      // From the LAN each count opens the page that lists those findings: the check's worklist, or the admin page.
+      for (const href of ["http://h/worklist", "http://a.localdomain/admin"]) expect(lanHome).toContain(`<a href="${href}"><span class="pill stale"><span class="dot"></span>1 needs attention</span></a>`);
       expect(open).toContain(`<a href="https://a.example/">a-mcp</a>`);
       // The portal's web page, not its MCP address, which a browser can't open.
       expect(open).toContain(`<a href="https://portal.example/">portal.example</a>`);
