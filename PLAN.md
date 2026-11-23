@@ -100,7 +100,9 @@ chooses the file. A second suite later is a second config and a second LXC, not 
 
 One page, reloaded every minute:
 
-1. **Services** (built): one row each, showing up/down and for how long, version, deployed commit and its age,
+1. **Services** (built): one row each, by name, this server's among them when the config's `self` names its repository and
+   admin page (from what it knows of itself: its version, its deploy record, and its own tools; it can't report
+   itself down, since then there's no page), showing up/down and for how long, version, deployed commit and its age,
    a pill when the branch isn't `main` or the checkout was unclean, tool count, how many findings need
    attention, and a link to its admin UI. Each finding counts under the service its fix belongs to (the first
    one its owner names). On the LAN the count is a link straight to the page that lists them: the worklist

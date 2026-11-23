@@ -41,6 +41,8 @@ export interface SuiteConfig {
   /** Suite-level routing for an agent, added to this server's MCP instructions. Keep it short: the portal joins
    *  every server's instructions and cuts the result off at a length. */
   guidance: string[];
+  /** This server's own row in the services list: its repository, public page, and admin page. Unset: no row. */
+  self?: { repo?: string; public?: string; admin?: string };
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -110,6 +112,11 @@ export function parseConfig(raw: unknown): SuiteConfig {
       ...(raw.checks.worklist !== undefined ? { worklist: httpUrl(raw.checks.worklist, "checks.worklist", true) } : {}),
     } } : {}),
     ...(isObject(raw.skills) ? { skills: { repo: text(raw.skills.repo, "skills.repo"), ref: text(raw.skills.ref, "skills.ref") } } : {}),
+    ...(isObject(raw.self) ? { self: {
+      ...(raw.self.repo !== undefined ? { repo: text(raw.self.repo, "self.repo") } : {}),
+      ...(raw.self.public !== undefined ? { public: httpUrl(raw.self.public, "self.public", true) } : {}),
+      ...(raw.self.admin !== undefined ? { admin: httpUrl(raw.self.admin, "self.admin", true) } : {}),
+    } } : {}),
     guidance: Array.isArray(raw.guidance) ? raw.guidance.map((line, i) => text(line, `guidance[${i}]`)) : [],
   };
 }

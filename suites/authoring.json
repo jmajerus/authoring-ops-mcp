@@ -1,6 +1,7 @@
 {
   "suite": "authoring",
   "portal": "https://authoring.majerus.us/mcp",
+  "self": { "repo": "jmajerus/authoring-ops-mcp", "admin": "http://authoring-ops-mcp.localdomain:8000/admin" },
   "guidance": [
     "To find a work (a book, an article, anything the owner has), start with holdings' find_work: it says what form the work is held in and which tools to call next. corpus searches and reads the e-books' text; quote holds saved quotes and cites them; terminology holds the concepts; zotero files and edits bibliographic records; iasp validates and renders a marked-up draft.",
     "Each server's own instructions say how to use its tools. This server says whether they're working, and holds the skills."
