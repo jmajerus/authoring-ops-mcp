@@ -8,6 +8,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { describe, expect, it } from "vitest";
 import { parseConfig } from "../src/config.js";
 import { ago, dashboardPage, servicePage } from "../src/dashboard.js";
+import { VERSION } from "../src/version.js";
 import { instructions, statusOf } from "../src/mcp.js";
 import { Poller } from "../src/poller.js";
 import { type Installed, readInstalled } from "../src/github.js";
@@ -201,6 +202,26 @@ describe("polling", () => {
       { id: "cross-service:waiting", severity: "drift", fix: "a person", summary: "waiting: 2 found.", link: "http://h/worklist" },
     ]);
     expect(JSON.stringify(s.findings)).not.toContain("x is waiting"); // the examples stay on the worklist
+  });
+
+  it("lists itself as a service when the config names it, with its own deploy, tools, and findings", async () => {
+    const withSelf = parseConfig({ ...JSON.parse(JSON.stringify(config)), self: { repo: "me/ops", admin: "http://ops.local/admin" } });
+    const deployed = { branch: "fix", commit: "0123abc", at: "2026-11-16T10:00:00Z", dirty: true };
+    const poller = new Poller(withSelf, new Store(), {
+      clock: () => new Date("2026-11-16T12:00:00Z"), deployed: () => deployed,
+      fetchJson: async (url) => (url.endsWith("/health") ? { ok: true } : url.includes("subscribers") ? { subscribers: [] } : { checks: [] }),
+      listTools: async () => ["x"],
+    });
+    const s = await poller.poll();
+    expect(s.services.map((v) => v.name)).toEqual(["a-mcp", "b-mcp", "test-ops-mcp"]);
+    expect(s.services[2]).toMatchObject({ name: "test-ops-mcp", up: true, repo: "me/ops", admin: "http://ops.local/admin",
+      health: { version: VERSION, deployed }, tools: { names: ["status", "findings"] } });
+    expect(s.tools_total).toBe(4); // a-mcp's x, b-mcp's x, and its own two, counted once
+    expect(s.findings.filter((f) => f.fix === "me/ops").map((f) => f.id).sort()).toEqual(["branch:test-ops-mcp", "dirty:test-ops-mcp"]);
+    const html = dashboardPage(s, "test", { lan: true, now: Date.parse("2026-11-16T12:00:00Z") });
+    expect(html).toContain(`<a href="/services/test-ops-mcp">test-ops-mcp</a>`);
+    expect(html).toContain(`<a href="http://ops.local/admin"><span class="pill stale"><span class="dot"></span>2 need attention</span></a>`);
+    expect(html).not.toContain("counting this server's");
   });
 
   it("gives a source five minutes before calling it unreadable, and reports a blown tool budget", async () => {

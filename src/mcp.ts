@@ -4,7 +4,8 @@ import { z } from "zod";
 import type { Poller, Snapshot } from "./poller.js";
 import { SkillError, readSkillFile, versionLabel } from "./skills.js";
 
-export const VERSION = "0.1.0";
+export { VERSION } from "./version.js";
+import { VERSION } from "./version.js";
 
 /**
  * Short on purpose: the portal joins every server's instructions and cuts the result off at a length, so each

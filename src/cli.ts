@@ -4,6 +4,7 @@ import { loadConfig } from "./config.js";
 import { readInstalled } from "./github.js";
 import { statusOf } from "./mcp.js";
 import { Poller } from "./poller.js";
+import { readHealth } from "./probes.js";
 import { serveHttp, serveStdio } from "./server.js";
 import { loadSkills } from "./skills.js";
 import { Store } from "./store.js";
@@ -25,9 +26,14 @@ const installed = () => () => {
   try { return readInstalled(JSON.parse(fs.readFileSync(path.join(path.dirname(stateFile()), "forks.json"), "utf8"))); } catch { return {}; }
 };
 
+/** What this server's own deploy recorded, from deployed.json beside the state file: read each poll. */
+const deployed = () => () => {
+  try { return readHealth({ deployed: JSON.parse(fs.readFileSync(path.join(path.dirname(stateFile()), "deployed.json"), "utf8")) }, "").deployed; } catch { return undefined; }
+};
+
 const commands: Record<string, () => unknown> = {
   serve: async () => {
-    const poller = new Poller(loadConfig(), new Store(stateFile()), { skills: skills(), installed: installed() });
+    const poller = new Poller(loadConfig(), new Store(stateFile()), { skills: skills(), installed: installed(), deployed: deployed() });
     await serveHttp(poller, { host: process.env.OPS_HOST ?? "0.0.0.0", port: Number(process.env.OPS_PORT ?? 8000), stateDir: path.dirname(stateFile()) });
     poller.start(Number(process.env.OPS_POLL_SECONDS ?? 60));
   },

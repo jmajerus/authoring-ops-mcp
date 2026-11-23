@@ -1,12 +1,13 @@
 import type { SuiteConfig } from "./config.js";
-import { type Finding, type ServiceState, findFindings, toolsTotal } from "./findings.js";
+import { type Finding, type ServiceState, findFindings, ownToolNames, toolsTotal } from "./findings.js";
 import {
-  type ChecksState, type FetchJson, type ListTools, type StatsState, type SubscribersState, type ToolsState,
+  type ChecksState, type Deployed, type FetchJson, type ListTools, type StatsState, type SubscribersState, type ToolsState,
   fetchJson, listTools, probeChecks, probeHealth, probeStats, probeSubscribers, probeTools,
 } from "./probes.js";
 import { type ForkState, type GitHubGet, type Installed, githubGet, githubRepo, probeFork } from "./github.js";
 import { type SkillSet, type SkillsVersion, describedServers, skillSummary } from "./skills.js";
 import type { Store } from "./store.js";
+import { VERSION } from "./version.js";
 
 /** One poll's view of the suite. Everything the dashboard and the tools show comes from the last one. */
 export interface Snapshot {
@@ -56,6 +57,8 @@ export interface PollerDeps {
   fetchJson?: FetchJson; listTools?: ListTools; github?: GitHubGet; clock?: () => Date; skills?: SkillSet;
   /** What the fork deploy last installed, by service (forks.json). Read every poll: a deploy changes it. */
   installed?: () => Record<string, Installed>;
+  /** What this server's own deploy recorded (deployed.json), for its row. Read every poll: a deploy changes it. */
+  deployed?: () => Deployed | undefined;
 }
 
 export class Poller {
@@ -68,6 +71,7 @@ export class Poller {
   private readonly list: ListTools;
   private readonly github: GitHubGet;
   private readonly installed: () => Record<string, Installed>;
+  private readonly deployed: () => Deployed | undefined;
   private readonly clock: () => Date;
   /** The skills this release carries, if any. They don't change while it runs. */
   readonly skills: SkillSet | undefined;
@@ -77,6 +81,7 @@ export class Poller {
     this.list = deps.listTools ?? listTools;
     this.github = deps.github ?? githubGet;
     this.installed = deps.installed ?? (() => ({}));
+    this.deployed = deps.deployed ?? (() => undefined);
     this.clock = deps.clock ?? (() => new Date());
     this.skills = deps.skills;
   }
@@ -133,12 +138,15 @@ export class Poller {
         ...(service.public ? { public: service.public } : {}), ...(service.upstream ? { upstream: service.upstream } : {}), ...(fork ? { fork } : {}), ...(stats ? { stats: { ...stats, owner: service.stats!.owner } } : {}), ...(health ? { health } : {}), ...(tools ? { tools } : {}),
       };
     });
+    if (config.self) services.push(this.selfRow(at));
+    // By name, so a row is where you'd look for it, whatever order the config lists them in.
+    services.sort((a, b) => a.name.localeCompare(b.name));
     const findings = findFindings(config, services, subscribers, checks, this.store, at, this.skills);
     this.store.save();
     this.snapshot = {
       suite: config.suite, ...(config.portal ? { portal: config.portal } : {}), polled_at: at, services,
       ...(subscribers ? { subscribers } : {}), ...(checks ? { checks } : {}),
-      tools_total: toolsTotal(services, this.skills), ...(config.tool_budget !== undefined ? { tool_budget: config.tool_budget } : {}),
+      tools_total: toolsTotal(services, this.skills, !!config.self), ...(config.tool_budget !== undefined ? { tool_budget: config.tool_budget } : {}),
       ...(this.skills ? { skills: {
         version: this.skills.version, names: this.skills.skills.map((s) => s.name),
         tools_checked: Object.values(this.skills.toolsUsed ?? {}).flat().length,
@@ -147,5 +155,22 @@ export class Poller {
       findings,
     };
     return this.snapshot;
+  }
+
+  /**
+   * This server, as it knows itself: up while it can answer at all (when it can't, nothing shows this row), its
+   * version and deploy from deployed.json, and its own tools. The same findings apply as to any service: a deploy
+   * from a branch or an unclean checkout.
+   */
+  private selfRow(at: string): ServiceState {
+    const { suite, self } = this.config;
+    const name = `${suite}-ops-mcp`;
+    const deployed = this.deployed();
+    return {
+      name, third_party: false, up: true, since: this.store.since(name, true, at),
+      ...(self!.repo ? { repo: self!.repo } : {}), ...(self!.admin ? { admin: self!.admin } : {}), ...(self!.public ? { public: self!.public } : {}),
+      health: { ok: true, version: VERSION, ...(deployed ? { deployed } : {}), checked_at: at },
+      tools: { ok: true, names: ownToolNames(this.skills), version: VERSION, checked_at: at, ok_at: at },
+    };
   }
 }

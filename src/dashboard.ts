@@ -1,7 +1,7 @@
 import type { Finding, ServiceState } from "./findings.js";
 import { type ForkState, forkLine } from "./github.js";
 import type { StatsState } from "./probes.js";
-import { VERSION } from "./mcp.js";
+import { VERSION } from "./version.js";
 import type { Snapshot } from "./poller.js";
 import { versionLabel } from "./skills.js";
 
@@ -262,7 +262,7 @@ export function dashboardPage(s: Snapshot | undefined, suite: string, options: P
 ${admin ? adminSection(s, options.worklist) : ""}
 <h2>Services</h2>
 ${servicesTable(s, now, admin, lan)}
-<p class="s">${s.tools_total} tools across the suite${budget}, counting this server's ${s.skills ? "four" : "two"}. The portal's own toggles aren't visible from here.</p>
+<p class="s">${s.tools_total} tools across the suite${budget}${s.services.some((v) => v.name === `${s.suite}-ops-mcp`) ? "" : `, counting this server's ${s.skills ? "four" : "two"}`}. The portal's own toggles aren't visible from here.</p>
 ${subscribersTable(s, now, admin)}
 ${skillsSection(s)}
 <p class="s" style="margin-top:32px">${esc(s.suite)}-ops-mcp ${VERSION}${admin ? ` · <a href="/">public page</a> · <a href="/api/status">/api/status</a> · <a href="/health">/health</a>` : lan ? ` · <a href="/admin">admin</a>` : ""}</p>
