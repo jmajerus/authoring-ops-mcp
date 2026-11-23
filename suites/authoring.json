@@ -7,10 +7,10 @@
   ],
   "services": [
     { "name": "corpus-mcp", "health": "http://corpus-mcp.localdomain:8000/health", "mcp": "http://corpus-mcp.localdomain:8000/mcp", "repo": "jmajerus/corpus-mcp", "public": "https://corpus.majerus.us/", "admin": "http://corpus-mcp.localdomain:8000/admin" },
-    { "name": "quote-mcp", "health": "http://quote-mcp.localdomain:8000/health", "mcp": "http://quote-mcp.localdomain:8000/mcp", "repo": "jmajerus/quote-mcp", "public": "https://quotes.majerus.us/" },
-    { "name": "terminology-mcp", "health": "http://terminology-mcp.localdomain:8000/health", "mcp": "http://terminology-mcp.localdomain:8000/mcp", "repo": "jmajerus/terminology-mcp", "public": "https://terminology.majerus.us/" },
+    { "name": "quote-mcp", "health": "http://quote-mcp.localdomain:8000/health", "mcp": "http://quote-mcp.localdomain:8000/mcp", "repo": "jmajerus/quote-mcp", "public": "https://quotes.majerus.us/", "admin": "http://quote-mcp.localdomain:8000/admin" },
+    { "name": "terminology-mcp", "health": "http://terminology-mcp.localdomain:8000/health", "mcp": "http://terminology-mcp.localdomain:8000/mcp", "repo": "jmajerus/terminology-mcp", "public": "https://terminology.majerus.us/", "admin": "http://terminology-mcp.localdomain:8000/admin" },
     { "name": "holdings-mcp", "health": "http://holdings-mcp.localdomain:8000/health", "mcp": "http://holdings-mcp.localdomain:8000/mcp", "repo": "jmajerus/holdings-mcp", "public": "https://holdings.majerus.us/", "admin": "http://holdings-mcp.localdomain:8000/admin" },
-    { "name": "iasp-mcp", "health": "http://iasp-mcp.localdomain:8000/health", "mcp": "http://iasp-mcp.localdomain:8000/mcp", "repo": "jmajerus/iasp-mcp", "public": "https://iasp.majerus.us/" },
+    { "name": "iasp-mcp", "health": "http://iasp-mcp.localdomain:8000/health", "mcp": "http://iasp-mcp.localdomain:8000/mcp", "repo": "jmajerus/iasp-mcp", "public": "https://iasp.majerus.us/", "admin": "http://iasp-mcp.localdomain:8000/admin" },
     { "name": "zotero-mcp", "mcp": "http://zotero-mcp.localdomain:8000/mcp", "third_party": true, "upstream": "https://github.com/54yyyu/zotero-mcp",
       "stats": { "url": "http://holdings-mcp.localdomain:8000/api/zotero/stats", "owner": "jmajerus/holdings-mcp" },
       "fork": { "repo": "jmajerus/zotero-mcp", "branch": "lan",
