@@ -103,8 +103,9 @@ One page, reloaded every minute:
 1. **Services** (built): one row each, showing up/down and for how long, version, deployed commit and its age,
    a pill when the branch isn't `main` or the checkout was unclean, tool count, how many findings need
    attention, and a link to its admin UI. Each finding counts under the service its fix belongs to (the first
-   one its owner names); on the LAN the count sits beside *details* (the service's page, which lists them) and
-   *fix* (the service's admin page). The public page shows the count only. Findings whose fix is in no service
+   one its owner names). On the LAN the count is a link straight to the page that lists them: the worklist
+   that keeps a check's findings, or the service's admin page (a count each, when they go to both). The public
+   page shows the count only. Findings whose fix is in no service
    get one line under the table. The severities stay in the `findings` tool, for agents; the page says only
    "needs attention".
 2. **Subscribers** (built): terminology-mcp's registry (state, schemes, last seen).
