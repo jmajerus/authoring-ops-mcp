@@ -5,8 +5,8 @@ The front door to the authoring suite behind the Authoring Portal (`suite_` ther
 - **Routing.** Its MCP instructions tell an agent which server does what and where to start (holdings'
   `find_work` for anything the owner has). The portal shows them ahead of every other server's.
 - **Health.** It polls every service each minute and answers whether the suite is working. Each finding says
-  how bad it is and who owns the fix. A page at `/` shows the same to anyone; `/admin`, on the LAN, adds
-  the errors behind each finding and the links to where fixes are made.
+  how bad it is and who owns the fix. A page at `/` shows anyone how many need attention in each service; on
+  the LAN each count links to the findings and to the page where they're fixed, and `/admin` adds the errors.
 - **Skills.** It serves the [authoring skills](https://github.com/jmajerus/authoring-skills) to sessions that
   have none installed, and checks that every tool the skills call is still listed by its service.
 

@@ -80,7 +80,7 @@ export function serveHttp(poller: Poller, options: ServeOptions): Promise<http.S
         if (req.method !== "GET" && req.method !== "HEAD") return void res.writeHead(405, { allow: "GET, HEAD" }).end();
         let name: string;
         try { name = decodeURIComponent(url.pathname.slice("/services/".length)); } catch { return void res.writeHead(404).end(); }
-        const page = poller.snapshot && servicePage(poller.snapshot, name, poller.skills?.toolsUsed?.[name]);
+        const page = poller.snapshot && servicePage(poller.snapshot, name, poller.skills?.toolsUsed?.[name], Date.now(), via === "lan");
         if (!page) return void res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }).end("No such service in this suite, or no poll yet.");
         return void res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(req.method === "HEAD" ? undefined : page);
       }

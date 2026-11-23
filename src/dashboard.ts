@@ -1,4 +1,4 @@
-import type { Finding } from "./findings.js";
+import type { Finding, ServiceState } from "./findings.js";
 import { type ForkState, forkLine } from "./github.js";
 import type { StatsState } from "./probes.js";
 import { VERSION } from "./mcp.js";
@@ -55,7 +55,30 @@ ul{margin:4px 0 0;padding-left:1.2rem}
 .card{border:1px solid var(--border);background:var(--surface);border-radius:10px;padding:12px 14px}
 .card strong{display:block;font-size:1.5rem;line-height:1.3;font-variant-numeric:tabular-nums}`;
 
-function servicesTable(s: Snapshot, now: number, admin: boolean): string {
+/**
+ * The service a finding's fix belongs to: the first service its owner names, by name or repository. A check that
+ * names two ("corpus-mcp for a book, quote-mcp for quotes") counts under the first. Undefined when it names none
+ * (the skills repository, the portal's toggles).
+ */
+export function ownerOf(f: Finding, services: ServiceState[]): string | undefined {
+  let best: { name: string; at: number } | undefined;
+  for (const v of services) {
+    for (const key of [v.name, v.repo].filter((k): k is string => !!k)) {
+      const m = new RegExp(`(^|[^\\w/-])${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\w-])`).exec(f.fix);
+      if (m && (!best || m.index < best.at)) best = { name: v.name, at: m.index };
+    }
+  }
+  return best?.name;
+}
+
+const attention = (n: number) => pill("stale", `${n} need${n === 1 ? "s" : ""} attention`);
+
+function servicesTable(s: Snapshot, now: number, admin: boolean, lan: boolean): string {
+  const counts = new Map<string, number>();
+  for (const f of s.findings) {
+    const owner = ownerOf(f, s.services);
+    if (owner) counts.set(owner, (counts.get(owner) ?? 0) + 1);
+  }
   const rows = s.services.map((v) => {
     const d = v.health?.deployed;
     const notes = [
@@ -70,12 +93,23 @@ function servicesTable(s: Snapshot, now: number, admin: boolean): string {
     const repo = admin && v.repo ? `https://github.com/${v.repo}` : undefined;
     const commit = d?.commit ? link(repo && `${repo}/commit/${d.commit}`, d.commit.slice(0, 7)) : "";
     const name = admin ? link(repo, v.name) : v.public ? link(v.public, v.name) : `<a href="${esc(servicePath(v.name))}">${esc(v.name)}</a>`;
+    // The count for anyone; on the LAN, what they are beside where they're fixed.
+    const n = counts.get(v.name) ?? 0;
+    const needs = n ? [attention(n), ...(admin || lan ? [`<a href="${esc(servicePath(v.name))}#attention">details</a>`, v.admin ? link(v.admin, "fix") : ""] : [])].filter(Boolean).join(" ") : "";
     return `<tr><td>${name}</td><td>${pill(v.up ? "up" : "down", v.up ? "up" : "down")} <span class="s">${time(v.since, now)}</span></td>
 <td>${esc(v.health?.version ?? v.tools?.version)}</td><td><code>${commit}</code></td><td>${time(d?.at, now)}</td>
-<td class="n">${v.tools ? v.tools.names.length : ""}</td><td class="w">${notes}</td>${admin ? `<td>${v.admin ? link(v.admin, "admin") : ""}</td>` : ""}</tr>`;
+<td class="n">${v.tools ? v.tools.names.length : ""}</td><td>${needs}</td><td class="w">${notes}</td>${admin ? `<td>${v.admin ? link(v.admin, "admin") : ""}</td>` : ""}</tr>`;
   }).join("\n");
-  return `<div class="wrap"><table><thead><tr><th>Service</th><th>State, for</th><th>Version</th><th>Commit</th><th>Deployed</th><th class="n">Tools</th><th></th>${admin ? "<th></th>" : ""}</tr></thead>
-<tbody>${rows}</tbody></table></div>`;
+  return `<div class="wrap"><table><thead><tr><th>Service</th><th>State, for</th><th>Version</th><th>Commit</th><th>Deployed</th><th class="n">Tools</th><th>Needs attention</th><th></th>${admin ? "<th></th>" : ""}</tr></thead>
+<tbody>${rows}</tbody></table></div>${elsewhere(s)}`;
+}
+
+/** Findings whose fix is in no service: one line, the count and where. */
+function elsewhere(s: Snapshot): string {
+  const rest = s.findings.filter((f) => !ownerOf(f, s.services));
+  if (!rest.length) return "";
+  const where = [...new Set(rest.map((f) => f.fix))];
+  return `<p>${attention(rest.length)} <span class="s">outside the services: ${esc(where.join("; "))}</span></p>`;
 }
 
 function subscribersTable(s: Snapshot, now: number, admin: boolean): string {
@@ -88,18 +122,6 @@ function subscribersTable(s: Snapshot, now: number, admin: boolean): string {
   }).join("\n");
   return `<h2>Terminology subscribers${subs.head !== undefined ? ` <span class="s">head ${esc(subs.head)}</span>` : ""}</h2>
 <div class="wrap"><table><thead><tr><th>Subscriber</th><th>State</th><th>Schemes</th><th>Last seen</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
-}
-
-function findingsTable(findings: Finding[], now: number, admin: boolean): string {
-  if (!findings.length) return `<h2>Findings</h2><p>${pill("up", "none open")}</p>`;
-  const groups = new Map<string, Finding[]>();
-  for (const f of findings) groups.set(f.fix, [...(groups.get(f.fix) ?? []), f]);
-  const rows = [...groups].map(([fix, list]) => list.map((f, i) => `<tr>${i === 0 ? `<td rowspan="${list.length}" class="w">${esc(fix)}</td>` : ""}
-<td>${pill(f.severity === "fail" ? "down" : "stale", f.severity)}</td>
-<td class="w">${esc(f.summary)}${admin && f.detail ? ` <span class="s">${esc(f.detail)}</span>` : ""}${admin && f.link ? ` ${link(f.link, "details")}` : ""}</td>
-<td>${time(f.first_seen, now)}</td></tr>`).join("\n")).join("\n");
-  return `<h2>Findings <span class="s">by who owns the fix</span></h2>
-<div class="wrap"><table><thead><tr><th>Fix in</th><th>Severity</th><th>What</th><th>Open for</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 function skillsSection(s: Snapshot): string {
@@ -191,7 +213,7 @@ const pageHead = (title: string) => `<!doctype html><html lang="en"><head><meta 
  * One service, as this server sees it from the last poll: up or down, its version and tools, which of them the
  * skills call, and its findings. Public, so as safe as the public page: summaries only, no addresses or errors.
  */
-export function servicePage(s: Snapshot, name: string, toolsUsed: string[] = [], now = Date.now()): string | undefined {
+export function servicePage(s: Snapshot, name: string, toolsUsed: string[] = [], now = Date.now(), lan = false): string | undefined {
   const v = s.services.find((x) => x.name === name);
   if (!v) return undefined;
   const listed = v.tools?.names ?? [];
@@ -199,7 +221,7 @@ export function servicePage(s: Snapshot, name: string, toolsUsed: string[] = [],
   const rows = listed.map((t) => `<tr><td><code>${esc(t)}</code></td><td>${called.has(t) ? "called by the skills" : ""}</td></tr>`);
   const gone = toolsUsed.filter((t) => v.tools?.ok && !listed.includes(t));
   rows.push(...gone.map((t) => `<tr><td><code>${esc(t)}</code></td><td>${pill("down", "called by the skills, not listed")}</td></tr>`));
-  const findings = s.findings.filter((f) => f.id.split(":").includes(name));
+  const findings = s.findings.filter((f) => ownerOf(f, s.services) === name);
   const version = v.health?.version ?? v.tools?.version;
   const about = [
     v.third_party ? "A third-party server" : "",
@@ -214,8 +236,9 @@ ${v.stats ? statsSection(v.stats, v.stats.owner?.split("/").pop(), now) : ""}
 ${v.fork ? forkSection(v.fork, version, now) : ""}
 <h2>Tools <span class="s">${listed.length}${v.tools && !v.tools.ok ? ", from the last listing that answered" : ""}</span></h2>
 ${rows.length ? `<div class="wrap"><table><thead><tr><th>Tool</th><th></th></tr></thead><tbody>${rows.join("\n")}</tbody></table></div>` : `<p class="s">None listed.</p>`}
-<h2>Findings</h2>
-${findings.length ? `<ul>${findings.map((f) => `<li>${pill(f.severity === "fail" ? "down" : "stale", f.severity)} ${esc(f.summary)} <span class="s">${time(f.first_seen, now)}</span></li>`).join("\n")}</ul>` : `<p>${pill("up", "none open")}</p>`}
+<h2 id="attention">Needs attention${findings.length ? ` <span class="s">${findings.length}</span>` : ""}</h2>
+${findings.length ? `${lan && v.admin ? `<p>Fixed at ${link(v.admin, `${name} admin`)}.</p>` : ""}
+<ul>${findings.map((f) => `<li>${esc(f.summary)} <span class="s">for ${time(f.first_seen, now)}</span>${lan && f.detail ? ` <span class="s">${esc(f.detail)}</span>` : ""}${lan && f.link ? ` ${link(f.link, "details")}` : ""}</li>`).join("\n")}</ul>` : `<p>${pill("up", "nothing")}</p>`}
 </body></html>`;
 }
 
@@ -224,16 +247,15 @@ export function dashboardPage(s: Snapshot | undefined, suite: string, options: P
   const head = pageHead(`${suite} ops${admin ? " admin" : ""}`);
   if (!s) return `${head}<h1>${esc(suite)} suite</h1><p class="s">The first poll is still running. This page reloads by itself.</p></body></html>`;
   const down = s.services.filter((v) => !v.up).length;
-  const fails = s.findings.filter((f) => f.severity === "fail").length;
-  const overall = down ? pill("down", `${down} down`) : fails ? pill("stale", "up, with failing checks") : pill("up", "all up");
+  const open = s.findings.length;
+  const overall = down ? pill("down", `${down} down`) : open ? attention(open) : pill("up", "all up");
   const budget = s.tool_budget !== undefined ? ` of a budget of ${s.tool_budget}` : "";
   return `${head}<h1>${esc(s.suite)} suite${admin ? " admin" : ""} ${overall}</h1>
 <p class="s">Polled ${time(s.polled_at, now)} ago. ${s.portal ? `Portal: ${portalLink(s.portal)}. ` : ""}Reloads every minute. This page reads and reports; it changes nothing.</p>
 ${admin ? adminSection(s, options.worklist) : ""}
 <h2>Services</h2>
-${servicesTable(s, now, admin)}
+${servicesTable(s, now, admin, lan)}
 <p class="s">${s.tools_total} tools across the suite${budget}, counting this server's ${s.skills ? "four" : "two"}. The portal's own toggles aren't visible from here.</p>
-${findingsTable(s.findings, now, admin)}
 ${subscribersTable(s, now, admin)}
 ${skillsSection(s)}
 <p class="s" style="margin-top:32px">${esc(s.suite)}-ops-mcp ${VERSION}${admin ? ` · <a href="/">public page</a> · <a href="/api/status">/api/status</a> · <a href="/health">/health</a>` : lan ? ` · <a href="/admin">admin</a>` : ""}</p>

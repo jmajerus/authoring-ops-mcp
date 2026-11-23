@@ -101,10 +101,14 @@ chooses the file. A second suite later is a second config and a second LXC, not 
 One page, reloaded every minute:
 
 1. **Services** (built): one row each, showing up/down and for how long, version, deployed commit and its age,
-   a pill when the branch isn't `main` or the checkout was unclean, tool count, and a link to its admin UI.
-2. **Findings** (built): everything open, grouped by who owns the fix, worst and oldest first.
-3. **Subscribers** (built): terminology-mcp's registry (state, schemes, last seen).
-4. **Skills** (built): the pinned authoring-skills ref and commit, the skills' names, and whether every tool
+   a pill when the branch isn't `main` or the checkout was unclean, tool count, how many findings need
+   attention, and a link to its admin UI. Each finding counts under the service its fix belongs to (the first
+   one its owner names); on the LAN the count sits beside *details* (the service's page, which lists them) and
+   *fix* (the service's admin page). The public page shows the count only. Findings whose fix is in no service
+   get one line under the table. The severities stay in the `findings` tool, for agents; the page says only
+   "needs attention".
+2. **Subscribers** (built): terminology-mcp's registry (state, schemes, last seen).
+3. **Skills** (built): the pinned authoring-skills ref and commit, the skills' names, and whether every tool
    they call is still listed.
 
 Status pills say what state something is in. The page has no buttons, because it has no actions.
